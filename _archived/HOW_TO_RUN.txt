@@ -1,0 +1,127 @@
+================================================================================
+                    ROBOT PICK AND PLACE - HOW TO RUN
+================================================================================
+
+You have TWO options to run the robot control scripts:
+
+================================================================================
+OPTION 1: ISAAC SIM SCRIPT EDITOR (Easiest - Recommended for Testing)
+================================================================================
+
+Step 1: Open Isaac Sim
+Step 2: File > Open > po_wiwynn_test_v0002.usda
+Step 3: Window > Script Editor (or Ctrl+Shift+E)
+Step 4: Open file: script_editor_simple.py
+Step 5: Copy ALL contents (Ctrl+A, Ctrl+C)
+Step 6: Paste into Script Editor (Ctrl+V)
+Step 7: Click "Run" button (or Ctrl+Enter)
+Step 8: Watch the robots work!
+
+📄 Files to use:
+   - script_editor_simple.py        (Quick and easy - START HERE)
+   - script_editor_version.py       (Full featured version)
+
+📖 Instructions:
+   - SCRIPT_EDITOR_INSTRUCTIONS.md  (Detailed guide)
+
+================================================================================
+OPTION 2: STANDALONE PYTHON SCRIPT (For Production/Automation)
+================================================================================
+
+Windows:
+--------
+cd C:\Users\YourName\AppData\Local\ov\pkg\isaac_sim-2023.1.0
+python.bat D:\poc\po_wiwynn_test\robot_pick_place_production.py
+
+Linux:
+------
+cd ~/.local/share/ov/pkg/isaac_sim-2023.1.0
+./python.sh ~/poc/po_wiwynn_test/robot_pick_place_production.py
+
+📄 Files to use:
+   - robot_pick_place_production.py (Recommended - uses config.py)
+   - robot_pick_place_advanced.py   (Advanced features)
+   - robot_pick_place.py            (Basic version)
+   - config.py                      (Edit this to customize behavior)
+
+📖 Instructions:
+   - QUICKSTART.md                  (Quick start guide)
+   - README_ROBOT_CONTROL.md        (Complete documentation)
+
+================================================================================
+                            WHAT IT DOES
+================================================================================
+
+Task 1: Robot 2 (kr210_l150_02)
+        Picks:  geo_boxLid_01
+        Places: On Danny table
+
+Task 2: Robot 1 (kr210_l150_01)
+        Picks:  geo_cube_01
+        Places: Into grp_boxBody_01
+
+Task 3: Both robots return to starting positions
+
+================================================================================
+                            QUICK TIPS
+================================================================================
+
+✓ Start with script_editor_simple.py in Script Editor
+✓ Customize settings in config.py (for standalone scripts)
+✓ Check console output for progress
+✓ Press F in viewport to frame the scene
+✓ Read SCRIPT_EDITOR_INSTRUCTIONS.md for detailed help
+
+================================================================================
+                         TROUBLESHOOTING
+================================================================================
+
+Problem: Script doesn't run
+Solution: Make sure USD file is loaded in Isaac Sim
+
+Problem: Robots don't move
+Solution: Check that physics is enabled and simulation is playing
+
+Problem: Objects fall through
+Solution: Verify collision detection is enabled in USD file
+
+Problem: Need to adjust positions
+Solution: Edit config.py (standalone) or script values (Script Editor)
+
+================================================================================
+                            FILE SUMMARY
+================================================================================
+
+SCRIPT EDITOR VERSIONS (Use inside Isaac Sim):
+├── script_editor_simple.py          ⭐ RECOMMENDED - Start here
+├── script_editor_version.py         Full featured version
+└── SCRIPT_EDITOR_INSTRUCTIONS.md    Detailed instructions
+
+STANDALONE VERSIONS (Run from command line):
+├── robot_pick_place_production.py   ⭐ RECOMMENDED - Uses config
+├── robot_pick_place_advanced.py     Advanced features
+├── robot_pick_place.py              Basic version
+├── config.py                        Configuration file
+├── QUICKSTART.md                    Quick start guide
+└── README_ROBOT_CONTROL.md          Complete documentation
+
+THIS FILE:
+└── HOW_TO_RUN.txt                   You are here!
+
+================================================================================
+                            NEED HELP?
+================================================================================
+
+1. Read SCRIPT_EDITOR_INSTRUCTIONS.md for Script Editor usage
+2. Read README_ROBOT_CONTROL.md for detailed documentation
+3. Check Isaac Sim forums: forums.developer.nvidia.com
+4. Review Isaac Sim documentation
+
+================================================================================
+
+                    READY? LET'S GET STARTED! 🚀
+
+        Option 1 (Quick):  script_editor_simple.py in Script Editor
+        Option 2 (Production): robot_pick_place_production.py standalone
+
+================================================================================
