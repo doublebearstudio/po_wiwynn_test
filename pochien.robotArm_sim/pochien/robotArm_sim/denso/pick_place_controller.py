@@ -168,9 +168,9 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
                 1.0,    # 2: Wait/stabilize before grasping (important!)
                 0.05,   # 3: Close gripper
                 0.0008, # 4: Wait after grasp
-                0.005,  # 5: Lift object
-                0.0008, # 6: Move to target position
-                0.1,    # 7: Lower to placement height
+                0.001,  # 5: Lift object
+                0.001, # 6: Move to target position
+                0.01,    # 7: Lower to placement height
                 0.0008, # 8: Open gripper
                 0.008   # 9: Retreat from placed object
             ]
