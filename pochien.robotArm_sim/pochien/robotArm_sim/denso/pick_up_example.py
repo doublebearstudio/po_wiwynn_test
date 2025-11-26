@@ -31,9 +31,11 @@ simulation_app = SimulationApp({"headless": False})
 
 # Import Isaac Sim modules AFTER SimulationApp is created
 from isaacsim.core.api import World
+from omni.isaac.core.objects import GroundPlane
 import numpy as np
 from custom_pick_place import CustomPickPlace
 from pick_place_controller import PickPlaceController
+from isaacsim.core.utils.stage import add_reference_to_stage
 
 # ============================================================================
 # 2. Create Simulation World
@@ -41,14 +43,25 @@ from pick_place_controller import PickPlaceController
 # Create world with 1 meter as base unit
 my_world = World(stage_units_in_meters=1.0)
 
+# Create ground plane with physics
+ground_plane = my_world.scene.add(
+    GroundPlane(
+        prim_path="/World/GroundPlane",
+        size=100.0,  # Size in meters
+        color=None,  # Optional color (R, G, B)
+        physics_material=None  # Optional physics material
+    )
+)
+asset_path = "D:/poc/po_wiwynn_test/prp_table01.usda"
+add_reference_to_stage(usd_path=asset_path, prim_path="/World/Table")
 
 # ============================================================================
 # 3. Define Pick-and-Place Task
 # ============================================================================
 # Set the target position where the cube should be placed
 # Position format: [x, y, z] in meters relative to world origin
-initial_position = np.array([-0.2, 0.2, 0])
-target_position = np.array([-0.2, -1, 0])
+initial_position = np.array([-0.5, 0.4, 0.125])
+target_position = np.array([-0.5, -0.5, 0.5])
 # Set Z to half the cube height (0.0515m) so cube sits on the ground
 target_position[2] = 0.0515 / 2.0  # Z = 0.02575 meters
 

@@ -7,8 +7,8 @@
                 double radius = 5
             }
             dictionary Perspective = {
-                double3 position = (-0.039477647734198866, 1.1332211845204796, 1.3654781525990518)
-                double3 target = (-0.43744535115939065, -0.0753646107549717, 0.13593342744513892)
+                double3 position = (0.8237806354565886, -0.3822948871171534, 0.7432833594342413)
+                double3 target = (-0.20000007568954348, 0.19999989270164054, 5.565500738047291e-8)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
@@ -41,31 +41,37 @@
 
 def Xform "World"
 {
-    def Cylinder "Cube" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
-        prepend apiSchemas = ["PhysicsMassAPI", "MaterialBindingAPI"]
-    )
-    {
-        uniform token axis = "Z"
-        float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
-        double height = 1
-        rel material:binding:physics = </World/PhysicsMaterial_cube> (
-            bindMaterialAs = "weakerThanDescendants"
-        )
-        float physics:mass = 0.02
-        double radius = 0.5
-        custom bool refinementEnableOverride = 1
-        custom int refinementLevel = 2
-        quatd xformOp:orient = (1, 0, 0, 0)
-        double3 xformOp:scale = (0.05, 0.05, 0.05)
-        double3 xformOp:translate = (-0.2, 0.2, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
     def Material "PhysicsMaterial_cube" (
         prepend apiSchemas = ["PhysicsMaterialAPI"]
     )
     {
+        float physics:density = 1
+        float physics:dynamicFriction = 1
+        float physics:staticFriction = 3
+    }
+
+    def Mesh "Cube" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 3, 2, 4, 6, 7, 5, 6, 2, 3, 7, 4, 5, 1, 0, 4, 0, 2, 6, 5, 7, 3, 1]
+        rel material:binding = </World/PhysicsMaterial_cube> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        point3f[] points = [(-0.5, -0.5, 0.5), (0.5, -0.5, 0.5), (-0.5, 0.5, 0.5), (0.5, 0.5, 0.5), (-0.5, -0.5, -0.5), (0.5, -0.5, -0.5), (-0.5, 0.5, -0.5), (0.5, 0.5, -0.5)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (1, 0), (1, 1), (0, 1), (0, 0), (0, 1), (0, 0), (1, 0), (1, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (1, 0), (1, 1), (0, 1), (0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        quatd xformOp:orient = (1, 0, 0, 0)
+        double3 xformOp:scale = (0.05, 0.05, 0.05)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def DomeLight "DomeLight" (
@@ -80,60 +86,6 @@ def Xform "World"
         asset inputs:shaping:ies:file
         token inputs:texture:format = "latlong"
         quatd xformOp:orient = (1, 0, 0, 0)
-        double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
-    def Xform "GroundPlane"
-    {
-        quatf xformOp:orient = (1, 0, 0, 0)
-        float3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def Mesh "CollisionMesh"
-        {
-            uniform bool doubleSided = 0
-            int[] faceVertexCounts = [4]
-            int[] faceVertexIndices = [0, 1, 2, 3]
-            normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)]
-            point3f[] points = [(-25, -25, 0), (25, -25, 0), (25, 25, 0), (-25, 25, 0)]
-            color3f[] primvars:displayColor = [(0.5, 0.5, 0.5)]
-            texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)] (
-                interpolation = "varying"
-            )
-        }
-
-        def Plane "CollisionPlane" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
-        {
-            uniform token axis = "Z"
-            uniform token purpose = "guide"
-        }
-    }
-}
-
-def Xform "Environment"
-{
-    quatd xformOp:orient = (1, 0, 0, 0)
-    double3 xformOp:scale = (1, 1, 1)
-    double3 xformOp:translate = (0, 0, 0)
-    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-    def DistantLight "defaultLight" (
-        prepend apiSchemas = ["ShapingAPI"]
-    )
-    {
-        float inputs:angle = 1
-        float inputs:intensity = 3000
-        float inputs:shaping:cone:angle = 180
-        float inputs:shaping:cone:softness
-        float inputs:shaping:focus
-        color3f inputs:shaping:focusTint
-        asset inputs:shaping:ies:file
-        quatd xformOp:orient = (0.6532814824381883, 0.27059805007309856, 0.27059805007309856, 0.6532814824381883)
         double3 xformOp:scale = (1, 1, 1)
         double3 xformOp:translate = (0, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
