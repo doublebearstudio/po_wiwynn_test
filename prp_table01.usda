@@ -7,8 +7,8 @@
                 double radius = 5
             }
             dictionary Perspective = {
-                double3 position = (-2.03655354465668, -0.1000341254951999, 0.5929867795917597)
-                double3 target = (-0.6084623856627485, 0.06431869663830835, 0.23286653251250272)
+                double3 position = (-4.3889323474629975, -0.3707592066872366, 1.1861833355756957)
+                double3 target = (-0.6084623380242937, 0.0643187021208117, 0.23286672392952357)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
@@ -67,6 +67,35 @@ def Xform "World"
         double3 xformOp:scale = (0.4, 3, 0.1)
         double3 xformOp:translate = (-0.6000000000000002, -0.2, 0.05)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def Xform "GroundPlane"
+    {
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Mesh "CollisionMesh"
+        {
+            uniform bool doubleSided = 0
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)]
+            point3f[] points = [(-25, -25, 0), (25, -25, 0), (25, 25, 0), (-25, 25, 0)]
+            color3f[] primvars:displayColor = [(0.5, 0.5, 0.5)]
+            texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)] (
+                interpolation = "varying"
+            )
+        }
+
+        def Plane "CollisionPlane" (
+            prepend apiSchemas = ["PhysicsCollisionAPI"]
+        )
+        {
+            uniform token axis = "Z"
+            uniform token purpose = "guide"
+        }
     }
 }
 
