@@ -37,7 +37,7 @@ print("="*70)
 # 1. Define Positions
 # ============================================================================
 initial_position = np.array([-0.5, 0.4, 0.125])
-target_position = np.array([-0.6, -0.5, 0.125])
+target_position = np.array([-0.6, -0.5, 0.135])
 custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
 
 # ============================================================================
@@ -90,15 +90,37 @@ print("✓ Controller ready")
 # ============================================================================
 timeline = get_timeline_interface()
 initialized = False
+was_playing = False
 
 def simulation_step(step_size):
     """Called every physics step"""
-    global initialized
+    global initialized, was_playing
 
-    # One-time initialization when timeline starts
+    # Detect timeline stop/start cycle
+    is_playing = timeline.is_playing()
+
+    if not is_playing:
+        # Timeline stopped - reset initialization flag
+        if was_playing:
+            initialized = False
+            was_playing = False
+        return
+
+    # Timeline is playing
+    was_playing = True
+
+    # Initialize/re-initialize when timeline starts
     if not initialized:
         try:
             robot.initialize()
+
+            # Wait for physics view to be created
+            joint_positions = robot.get_joint_positions()
+            if joint_positions is None:
+                # Physics view not ready yet, try again next frame
+                return
+
+            # Physics view is ready, now initialize controller
             controller.reset()
             initialized = True
             print("\n✓ System initialized")
@@ -107,10 +129,20 @@ def simulation_step(step_size):
             print("="*70)
         except Exception as e:
             # Wait for physics context
+            print(f"Waiting for initialization: {e}")
             return
 
     # Main control loop
     try:
+        # Get joint positions
+        joint_positions = robot.get_joint_positions()
+
+        # Safety check (shouldn't happen after initialization, but just in case)
+        if joint_positions is None:
+            print("Warning: Physics view lost, re-initializing...")
+            initialized = False
+            return
+
         # Get observations
         observations = setup.get_observations(robot)
 
@@ -118,7 +150,7 @@ def simulation_step(step_size):
         actions = controller.forward(
             picking_position=observations["pickup_object"]["position"],
             placing_position=observations["pickup_object"]["target_position"],
-            current_joint_positions=observations["cobotta_robot"]["joint_positions"],
+            current_joint_positions=joint_positions,
             end_effector_offset=np.array([0, 0, 0.25]),
         )
 

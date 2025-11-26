@@ -163,16 +163,16 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
             # These values control the duration of each state in the pick-place sequence
             # Tune these if movements are too fast/slow or jerky
             events_dt = [
-                0.005,  # 0: Move to pre-grasp position
-                0.002,  # 1: Descend to grasp height
+                0.001,  # 0: Move to pre-grasp position
+                0.0002,  # 1: Descend to grasp height
                 1.0,    # 2: Wait/stabilize before grasping (important!)
                 0.05,   # 3: Close gripper
                 0.0008, # 4: Wait after grasp
-                0.001,  # 5: Lift object
-                0.001, # 6: Move to target position
-                0.01,    # 7: Lower to placement height
-                0.0008, # 8: Open gripper
-                0.008   # 9: Retreat from placed object
+                0.00005,  # 5: Lift object
+                0.00005, # 6: Move to target position
+                0.00001,    # 7: Lower to placement height
+                0.0001, # 8: Open gripper
+                0.0004   # 9: Retreat from placed object
             ]
 
         # ====================================================================
