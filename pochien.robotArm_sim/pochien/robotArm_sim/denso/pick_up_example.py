@@ -61,9 +61,9 @@ add_reference_to_stage(usd_path=asset_path, prim_path="/World/Table")
 # Set the target position where the cube should be placed
 # Position format: [x, y, z] in meters relative to world origin
 initial_position = np.array([-0.5, 0.4, 0.125])
-target_position = np.array([-0.5, -0.5, 0.5])
+target_position = np.array([-0.6, -0.5, 0.125])
 # Set Z to half the cube height (0.0515m) so cube sits on the ground
-target_position[2] = 0.0515 / 2.0  # Z = 0.02575 meters
+# target_position[2] = 0.0515 / 2.0  # Z = 0.02575 meters
 
 
 # Create the pick-and-place task
