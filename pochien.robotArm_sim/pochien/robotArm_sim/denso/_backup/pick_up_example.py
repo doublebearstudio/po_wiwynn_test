@@ -21,6 +21,7 @@ Key Components:
 - PickPlaceController: High-level controller that manages the pick-and-place sequence
 - World: Isaac Sim simulation world manager
 """
+
 from isaacsim import SimulationApp
 
 # ============================================================================
@@ -30,8 +31,6 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp({"headless": False})
 
 # Import Isaac Sim modules AFTER SimulationApp is created
-from pxr import Sdf
-import omni.usd
 from isaacsim.core.api import World
 import numpy as np
 from pick_place import PickPlace
@@ -49,19 +48,16 @@ my_world = World(stage_units_in_meters=1.0)
 # ============================================================================
 # Set the target position where the cube should be placed
 # Position format: [x, y, z] in meters relative to world origin
-target_position = np.array([-0.6, 0.6, 0])
+target_position = np.array([-0.3, 0.6, 0])
 # Set Z to half the cube height (0.0515m) so cube sits on the ground
 target_position[2] = 0.0515 / 2.0  # Z = 0.02575 meters
-initial_position = np.array([0.5, 0.3, 0])
 
 # Create the pick-and-place task
 # This will:
 # - Load the Denso Cobotta robot with OnRobot RG6 gripper
 # - Create a cube at default initial position
 # - Set up the target position for placing the cube
-my_task = PickPlace(name="denso_pick_place",
-                    cube_initial_position=initial_position,
-                    target_position=target_position)
+my_task = PickPlace(name="denso_pick_place", target_position=target_position)
 
 # ============================================================================
 # 4. Initialize Scene and Robot
@@ -102,7 +98,6 @@ articulation_controller = my_denso.get_articulation_controller()
 
 # Counter variable (currently unused)
 i = 0
-
 
 # ============================================================================
 # 6. Main Simulation Loop

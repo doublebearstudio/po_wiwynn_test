@@ -1,15 +1,5 @@
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-#
-# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
-# property and proprietary rights in and to this material, related
-# documentation and any modifications thereto. Any use, reproduction,
-# disclosure or distribution of this material and related documentation
-# without an express license agreement from NVIDIA CORPORATION or
-# its affiliates is strictly prohibited.
-
 """
-Robot Pick-and-Place Extension for Existing USD Scene
+Complete Robot Pick-and-Place Extension for Existing USD Scene
 
 This extension integrates full robot pick-and-place functionality with an existing
 USD scene file. Uses the PickPlaceController for smooth, reliable motion.
@@ -40,9 +30,8 @@ import os
 
 # Add denso directory to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
-denso_dir = os.path.join(current_dir, "denso")
-if denso_dir not in sys.path:
-    sys.path.insert(0, denso_dir)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 # Import pick_place_controller from local denso directory
 try:
@@ -52,14 +41,13 @@ except ImportError as e:
     PickPlaceController = None
 
 
-class MyExtension(omni.ext.IExt):
+class RobotPickupExtensionComplete(omni.ext.IExt):
     """
-    Extension for robot pick-and-place in existing scene.
+    Complete extension for robot pick-and-place in existing scene.
 
     This extension provides full integration with:
     - Existing USD scene loading
-    - Robot gripper configuration
-    - PickPlaceController for motion control
+    - Robot gripper configuration    - PickPlaceController for motion control
     - Start/Stop UI controls
     - Automatic home position return
     """
@@ -86,11 +74,9 @@ class MyExtension(omni.ext.IExt):
         self._cube_prim_path = "/World/geo_cube_01"
 
         # Task configuration
-        self._pickup_position = np.array([0.4, 0.3, 0.025])
-        self._place_position = np.array([-0.5, 0.3, 0.025])
-        # End-effector offset represents gripper TCP offset from base link
-        # This is the gripper geometry, not height above cube
-        self._end_effector_offset = np.array([0, 0, 0.25])  # Match working example
+        self._pickup_position = np.array([1.0, 0.0, 0.025])
+        self._place_position = np.array([0.0, 1.0, 0.025])
+        self._end_effector_offset = np.array([0, 0, 0.25])
         self._home_joint_positions = None
 
         # ====================================================================
@@ -126,6 +112,9 @@ class MyExtension(omni.ext.IExt):
                             word_wrap=True,
                             style={"font_size": 13, "color": 0xFF00DD00}
                         )
+
+                        # Progress indicator (optional future enhancement)
+                        # self._progress = ui.ProgressBar(height=20)
 
                 # ============================================================
                 # Scene Configuration Section
@@ -317,8 +306,7 @@ class MyExtension(omni.ext.IExt):
 
             # Create World (don't add physics - already in USD)
             self._update_status("Creating simulation world...", error=False)
-            # self._world = World(stage_units_in_meters=1.0, add_ground_plane=False)
-            self._world = World(stage_units_in_meters=1.0)
+            self._world = World(stage_units_in_meters=1.0, add_ground_plane=False)
 
             # Configure robot
             self._update_status("Configuring robot...", error=False)
@@ -330,35 +318,11 @@ class MyExtension(omni.ext.IExt):
             self._update_status("Initializing physics...", error=False)
             await self._world.reset_async()
 
-            # Initialize gripper AFTER world reset
-            self._update_status("Initializing gripper...", error=False)
-            self._gripper.initialize(
-                articulation_apply_action_func=self._robot.apply_action,
-                get_joint_positions_func=self._robot.get_joint_positions,
-                set_joint_positions_func=self._robot.set_joint_positions,
-                dof_names=self._robot.dof_names
-            )
-
-            # Get articulation controller
-            self._articulation_controller = self._robot.get_articulation_controller()
-
-            # Create pick-place controller if available
-            # CRITICAL: Use robot.gripper (not self._gripper) to match working example
-            if PickPlaceController:
-                self._controller = PickPlaceController(
-                    name="controller",
-                    robot_articulation=self._robot,
-                    gripper=self._robot.gripper  # Use gripper from robot object
-                )
-                print("[RobotPickup] PickPlaceController initialized with robot.gripper")
-            else:
-                print("[RobotPickup] Warning: PickPlaceController not available")
-
             # Store home position
             self._home_joint_positions = self._robot.get_joint_positions()
             print(f"[RobotPickup] Home position: {self._home_joint_positions}")
 
-            self._update_status("Ready - Click Start to begin", error=False)
+            self._update_status("✓ Ready - Click Start to begin", error=False)
 
             # Auto-start
             await asyncio.sleep(1.0)
@@ -383,16 +347,9 @@ class MyExtension(omni.ext.IExt):
             )
 
             # Create robot manipulator
-            robot_name = "cobotta_robot"
-
-            # Remove existing robot from scene if it exists
-            if self._world.scene.object_exists(robot_name):
-                print(f"[RobotPickup] Removing existing robot '{robot_name}' from scene")
-                self._world.scene.remove_object(robot_name)
-
             self._robot = SingleManipulator(
                 prim_path=self._robot_prim_path,
-                name=robot_name,
+                name="cobotta_robot",
                 end_effector_prim_name="onrobot_rg6_base_link",
                 gripper=self._gripper
             )
@@ -400,14 +357,24 @@ class MyExtension(omni.ext.IExt):
             # Add to scene
             self._world.scene.add(self._robot)
 
-            # Set default joint positions (gripper slightly open)
-            # This matches pick_place.py configuration
-            joints_default_positions = np.zeros(12)  # 6 arm joints + 6 gripper joints
-            joints_default_positions[7] = 0.628   # left_outer_knuckle_joint
-            joints_default_positions[8] = 0.628   # left_inner_knuckle_joint
-            self._robot.set_joints_default_state(positions=joints_default_positions)
+            # Initialize gripper
+            await asyncio.sleep(0.2)
+            self._gripper.initialize()
 
-            print("[RobotPickup] Robot added to scene with default joint positions")
+            # Get articulation controller
+            self._articulation_controller = self._robot.get_articulation_controller()
+
+            # Create pick-place controller if available
+            if PickPlaceController:
+                self._controller = PickPlaceController(
+                    name="controller",
+                    robot_articulation=self._robot,
+                    gripper=self._gripper
+                )
+                print("[RobotPickup] PickPlaceController initialized")
+            else:
+                print("[RobotPickup] Warning: PickPlaceController not available")
+
             return True
 
         except Exception as e:
@@ -487,24 +454,8 @@ class MyExtension(omni.ext.IExt):
             return
 
         try:
-            # Reset controller on simulation restart (matches working example)
-            if self._world.current_time_step_index == 0:
-                print("[RobotPickup] Resetting controller on simulation restart")
-                self._controller.reset()
-
             # Get current joint positions
             current_joint_positions = self._robot.get_joint_positions()
-
-            # Get end-effector position for debugging
-            ee_position, ee_orientation = self._robot.end_effector.get_world_pose()
-
-            # Log periodically (every 60 frames ~ 1 second)
-            if not hasattr(self, '_debug_counter'):
-                self._debug_counter = 0
-            self._debug_counter += 1
-            if self._debug_counter % 60 == 0:
-                print(f"[RobotPickup] EE Position: {ee_position}, Target: {self._pickup_position}")
-                print(f"[RobotPickup] Controller state: {self._controller._cspace_controller._current_state if hasattr(self._controller._cspace_controller, '_current_state') else 'unknown'}")
 
             # Compute actions from controller
             actions = self._controller.forward(
@@ -541,7 +492,7 @@ class MyExtension(omni.ext.IExt):
 
         # Stop simulation
         self._stop_simulation()
-        self._update_status("Complete! Robot returned to home. Click Start to repeat.", error=False)
+        self._update_status("✓ Complete! Robot returned to home. Click Start to repeat.", error=False)
 
     # ========================================================================
     # UI Helpers
