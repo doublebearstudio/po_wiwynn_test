@@ -188,7 +188,7 @@ class CustomPickPlace(BaseTask):
         # Set a default mass if not already set (100 grams)
         mass_api = UsdPhysics.MassAPI.Apply(prim)
         if not mass_api.GetMassAttr().Get():
-            mass_api.GetMassAttr().Set(0.1)
+            mass_api.GetMassAttr().Set(0.01)
 
         return
 
