@@ -24,7 +24,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "restore__commit",
     "last_opened_file_path": "D:/poc/po_wiwynn_test"
   },
   "keyToStringList": {
@@ -56,7 +56,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/extension.py</url>
-          <line>385</line>
+          <line>199</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
