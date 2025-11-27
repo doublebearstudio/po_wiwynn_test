@@ -113,6 +113,22 @@ class RobotArmSimulationExtension(omni.ext.IExt):
                     }
                 )
 
+                ui.Spacer(height=10)
+
+                # Reset Scene Button
+                self._reset_button = ui.Button(
+                    "Reset Scene",
+                    clicked_fn=self._on_reset_scene_clicked,
+                    height=40,
+                    style={
+                        "Button": {
+                            "background_color": 0xFFDD6600,
+                            "border_radius": 5,
+                            "font_size": 14
+                        }
+                    }
+                )
+
     def on_shutdown(self):
         """Clean up extension resources."""
         print("[RobotArmSim] Extension shutdown")
@@ -170,6 +186,12 @@ class RobotArmSimulationExtension(omni.ext.IExt):
 
             self._articulation_controller = self._robot.get_articulation_controller()
 
+            # Unsubscribe from any existing physics subscription (safety check)
+            if self._physics_subscription:
+                print("[RobotArmSim] Warning: Cleaning up old physics subscription")
+                self._physics_subscription.unsubscribe()
+                self._physics_subscription = None
+
             # Subscribe to physics updates
             self._physics_subscription = _physx.get_physx_interface().subscribe_physics_step_events(
                 self._on_physics_step
@@ -190,6 +212,9 @@ class RobotArmSimulationExtension(omni.ext.IExt):
             import traceback
             traceback.print_exc()
 
+            # Clean up on error
+            self._reset_scene()
+
     def _on_start_task_clicked(self):
         """Handle Start Task button - Starts/stops the simulation."""
         if not self._scene_setup_complete:
@@ -203,14 +228,31 @@ class RobotArmSimulationExtension(omni.ext.IExt):
             # Currently playing - stop it
             print("[RobotArmSim] Stopping simulation...")
             self._timeline.stop()
+
+            # Clean up task resources
+            self._cleanup_task()
+
             self._start_button.text = "Start Task"
-            self._update_status("Simulation stopped")
+            self._update_status("Simulation stopped - Task cleaned up")
         else:
             # Currently stopped - start it
             print("[RobotArmSim] Starting simulation...")
             self._timeline.play()
             self._start_button.text = "Stop Task"
             self._update_status("Simulation running...")
+
+    def _on_reset_scene_clicked(self):
+        """Handle Reset Scene button - Resets the entire scene."""
+        print("[RobotArmSim] Reset Scene button clicked")
+
+        # Stop timeline if playing
+        if self._timeline.is_playing():
+            self._timeline.stop()
+
+        # Reset everything
+        self._reset_scene()
+
+        self._update_status("Scene reset - Click 'Set Up Scene' to begin")
 
     # ========================================================================
     # Physics Step Callback
@@ -237,6 +279,7 @@ class RobotArmSimulationExtension(omni.ext.IExt):
         # Initialize/re-initialize when timeline starts
         if not self._initialized:
             try:
+                # Initialize robot (creates the physics view)
                 self._robot.initialize()
 
                 # Wait for physics view to be created
@@ -250,8 +293,15 @@ class RobotArmSimulationExtension(omni.ext.IExt):
                 self._initialized = True
                 print("[RobotArmSim] System initialized and running")
                 self._update_status("Running pick and place task...")
+            except AttributeError:
+                # Physics context not ready yet - this is normal at startup
+                # Silently wait and try again next frame
+                return
             except Exception as e:
-                # Wait for physics context
+                # Other unexpected errors - log them
+                print(f"[RobotArmSim] Initialization error: {e}")
+                import traceback
+                traceback.print_exc()
                 return
 
         # Main control loop
@@ -286,6 +336,57 @@ class RobotArmSimulationExtension(omni.ext.IExt):
 
         except Exception as e:
             print(f"[RobotArmSim] Error in control loop: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Stop timeline and clean up on critical error
+            self._update_status(f"Error: {str(e)}", error=True)
+            self._timeline.stop()
+            if self._physics_subscription:
+                self._physics_subscription.unsubscribe()
+                self._physics_subscription = None
+            self._initialized = False
+            self._start_button.text = "Start Task"
+
+    # ========================================================================
+    # Cleanup Methods
+    # ========================================================================
+
+    def _cleanup_task(self):
+        """Clean up task resources and reset state."""
+        print("[RobotArmSim] Cleaning up task...")
+
+        # Unsubscribe from physics updates
+        if self._physics_subscription:
+            self._physics_subscription.unsubscribe()
+            self._physics_subscription = None
+            print("[RobotArmSim] Physics subscription removed")
+
+        # Reset state flags
+        self._initialized = False
+        self._was_playing = False
+
+        print("[RobotArmSim] Task cleaned up")
+
+    def _reset_scene(self):
+        """Reset scene setup to allow re-initialization."""
+        print("[RobotArmSim] Resetting scene...")
+
+        # Clean up task first
+        self._cleanup_task()
+
+        # Reset scene objects
+        self._setup = None
+        self._robot = None
+        self._controller = None
+        self._articulation_controller = None
+        self._scene_setup_complete = False
+
+        # Re-enable setup button
+        self._setup_button.enabled = True
+        self._start_button.enabled = False
+
+        print("[RobotArmSim] Scene reset complete")
 
     # ========================================================================
     # Helper Methods

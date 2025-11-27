@@ -29,7 +29,7 @@ from isaacsim.robot.manipulators.grippers import ParallelGripper
 from isaacsim.core.utils.stage import add_reference_to_stage, get_current_stage
 from typing import Optional, Tuple
 import numpy as np
-from pxr import UsdGeom, Gf, UsdPhysics, PhysxSchema, Usd
+from pxr import UsdGeom, Gf, UsdPhysics, PhysxSchema, Usd, Sdf
 
 
 class PickPlaceSceneSetup:
@@ -115,7 +115,7 @@ class PickPlaceSceneSetup:
         add_reference_to_stage(usd_path=self.custom_usd_path, prim_path=self.object_prim_path)
 
         # Get the prim
-        prim = self._stage.GetPrimAtPath(self.object_prim_path)
+        prim = self._stage.GetPrimAtPath(Sdf.Path(self.object_prim_path))
 
         # Set position
         xformable = UsdGeom.Xformable(prim)
@@ -182,7 +182,7 @@ class PickPlaceSceneSetup:
         Returns:
             np.ndarray: Position [x, y, z] in meters
         """
-        prim = self._stage.GetPrimAtPath(self.object_prim_path)
+        prim = self._stage.GetPrimAtPath(Sdf.Path(self.object_prim_path))
         if not prim.IsValid():
             raise RuntimeError(f"Object prim not found at {self.object_prim_path}")
 
@@ -199,7 +199,7 @@ class PickPlaceSceneSetup:
         Returns:
             np.ndarray: Quaternion [x, y, z, w]
         """
-        prim = self._stage.GetPrimAtPath(self.object_prim_path)
+        prim = self._stage.GetPrimAtPath(Sdf.Path(self.object_prim_path))
         if not prim.IsValid():
             raise RuntimeError(f"Object prim not found at {self.object_prim_path}")
 
