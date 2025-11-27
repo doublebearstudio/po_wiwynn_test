@@ -37,7 +37,7 @@ print("="*70)
 # 1. Define Positions
 # ============================================================================
 initial_position = np.array([-0.5, 0.4, 0.125])
-target_position = np.array([-0.6, -0.5, 0.125])
+target_position = np.array([-0.6, -0.5, 0.135])
 custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
 
 # ============================================================================
