@@ -18,7 +18,8 @@ Features:
 - Setup Scene button: Configures robot, object, and controller
 - Uses PickPlaceSceneSetup for scene creation
 - Automatic control loop via physics subscription
-- Start simulation with Isaac Sim's PLAY button
+- Start/Stop simulation with Isaac Sim's PLAY/STOP buttons
+- Properly resets when stopping and restarting
 
 Author: Generated for Wiwynn Test
 Date: 2025-11-28
@@ -28,10 +29,12 @@ import omni.ext
 import omni.ui as ui
 import omni.usd
 from isaacsim.core.utils.stage import add_reference_to_stage
+from omni.timeline import get_timeline_interface
 import omni.physx as _physx
 import numpy as np
 import sys
 import os
+import carb
 
 # Add denso directory to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -67,14 +70,19 @@ class MyExtension(omni.ext.IExt):
         self._controller = None
         self._articulation_controller = None
         self._physics_subscription = None
+        self._timeline_subscription = None
         self._initialized = False
         self._scene_setup_complete = False
+        self._is_playing = False
 
         # Scene configuration
         self._initial_position = np.array([-0.5, 0.4, 0.125])
         self._target_position = np.array([-0.6, -0.5, 0.135])
         self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
         self._table_path = "D:/poc/po_wiwynn_test/prp_table01.usda"
+
+        # Get timeline interface
+        self._timeline = get_timeline_interface()
 
         # Create UI
         self._build_ui()
@@ -156,10 +164,19 @@ class MyExtension(omni.ext.IExt):
                         "2. Press PLAY button in Isaac Sim to start",
                         style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
+                    ui.Label(
+                        "3. Press STOP to stop, then PLAY again to repeat",
+                        style={"font_size": 10, "color": 0xFFAAAAAA}
+                    )
 
     def on_shutdown(self):
         """Clean up extension resources."""
         print("[RobotPickup] Extension shutdown")
+
+        # Unsubscribe from timeline events
+        if self._timeline_subscription:
+            self._timeline_subscription.unsubscribe()
+            self._timeline_subscription = None
 
         # Unsubscribe from physics
         if self._physics_subscription:
@@ -240,6 +257,11 @@ class MyExtension(omni.ext.IExt):
                 self._simulation_step
             )
 
+            # Subscribe to timeline events to detect play/stop
+            self._timeline_subscription = self._timeline.get_timeline_event_stream().create_subscription_to_pop(
+                self._on_timeline_event
+            )
+
             self._scene_setup_complete = True
             self._setup_button.enabled = False
 
@@ -260,8 +282,44 @@ class MyExtension(omni.ext.IExt):
             import traceback
             traceback.print_exc()
 
+    def _on_timeline_event(self, event):
+        """Handle timeline events (play/stop/pause)."""
+        if event.type == int(omni.timeline.TimelineEventType.PLAY):
+            print("[RobotPickup] Timeline PLAY event detected")
+            self._is_playing = True
+            self._update_status("Simulation started. Initializing...", error=False)
+
+        elif event.type == int(omni.timeline.TimelineEventType.STOP):
+            print("[RobotPickup] Timeline STOP event detected")
+            self._is_playing = False
+            self._on_simulation_stop()
+
+    def _on_simulation_stop(self):
+        """Handle simulation stop - reset state for next run."""
+        print("[RobotPickup] Resetting for next run...")
+
+        # Reset initialization flag
+        self._initialized = False
+
+        # Reset controller if it exists
+        if self._controller:
+            try:
+                self._controller.reset()
+                print("[RobotPickup] Controller reset")
+            except Exception as e:
+                print(f"[RobotPickup] Controller reset error: {e}")
+
+        self._update_status(
+            "Simulation stopped. Press PLAY to run again.",
+            error=False
+        )
+
     def _simulation_step(self, step_size):
         """Called every physics step when simulation is playing."""
+
+        # Only run if timeline is playing
+        if not self._is_playing:
+            return
 
         # One-time initialization when timeline starts
         if not self._initialized:
@@ -293,11 +351,14 @@ class MyExtension(omni.ext.IExt):
 
             # Check completion
             if self._controller.is_done():
-                print("✓ Pick and place complete!")
-                self._update_status("Task complete!", error=False)
+                if not hasattr(self, '_task_done_logged'):
+                    print("✓ Pick and place complete!")
+                    self._update_status("Task complete!", error=False)
+                    self._task_done_logged = True
 
             # Apply actions
-            self._articulation_controller.apply_action(actions)
+            if actions:
+                self._articulation_controller.apply_action(actions)
 
         except Exception as e:
             print(f"Error in control loop: {e}")
