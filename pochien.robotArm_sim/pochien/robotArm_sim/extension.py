@@ -9,32 +9,27 @@
 # its affiliates is strictly prohibited.
 
 """
-Robot Pick-and-Place Extension for Existing USD Scene
+Robot Pick-and-Place Extension - Simple Setup
 
-This extension integrates full robot pick-and-place functionality with an existing
-USD scene file. Uses the PickPlaceController for smooth, reliable motion.
+This extension provides a single button to set up the pick-and-place scene.
+After clicking the button, start the simulation by pressing the PLAY button in Isaac Sim.
 
 Features:
-- Loads existing USD scene (po_wiwynn_test_v0003.usda)
-- Configures robot gripper automatically
-- Start button: Pick cube from (1,0,0.025) and place at (0,1,0.025)
-- Stop button: Stops simulation immediately
-- Auto return to home position after completion
+- Setup Scene button: Configures robot, object, and controller
+- Uses PickPlaceSceneSetup for scene creation
+- Automatic control loop via physics subscription
+- Start simulation with Isaac Sim's PLAY button
 
 Author: Generated for Wiwynn Test
-Date: 2025-11-26
+Date: 2025-11-28
 """
 
 import omni.ext
 import omni.ui as ui
 import omni.usd
-from omni.isaac.core import World
-from omni.isaac.core.utils.stage import open_stage, get_current_stage
-from isaacsim.robot.manipulators.manipulators import SingleManipulator
-from isaacsim.robot.manipulators.grippers import ParallelGripper
+from isaacsim.core.utils.stage import add_reference_to_stage
+import omni.physx as _physx
 import numpy as np
-import asyncio
-from pathlib import Path
 import sys
 import os
 
@@ -44,71 +39,55 @@ denso_dir = os.path.join(current_dir, "denso")
 if denso_dir not in sys.path:
     sys.path.insert(0, denso_dir)
 
-# Import pick_place_controller from local denso directory
+# Import from local denso directory
 try:
+    from simple_pick_place_setup import PickPlaceSceneSetup
     from pick_place_controller import PickPlaceController
 except ImportError as e:
-    print(f"Warning: Could not import PickPlaceController: {e}")
+    print(f"Warning: Could not import required modules: {e}")
+    PickPlaceSceneSetup = None
     PickPlaceController = None
 
 
 class MyExtension(omni.ext.IExt):
     """
-    Extension for robot pick-and-place in existing scene.
+    Extension for robot pick-and-place scene setup.
 
-    This extension provides full integration with:
-    - Existing USD scene loading
-    - Robot gripper configuration
-    - PickPlaceController for motion control
-    - Start/Stop UI controls
-    - Automatic home position return
+    Provides a simple interface to set up the scene, then use Isaac Sim's
+    PLAY button to start the simulation.
     """
 
     def on_startup(self, ext_id: str):
         """Initialize the extension and create UI."""
         print("[RobotPickup] Extension startup")
 
-        # ====================================================================
-        # State Variables
-        # ====================================================================
-        self._world = None
+        # State variables
+        self._setup = None
         self._robot = None
-        self._gripper = None
         self._controller = None
         self._articulation_controller = None
-        self._is_running = False
-        self._task_complete = False
-        self._subscription = None
+        self._physics_subscription = None
+        self._initialized = False
+        self._scene_setup_complete = False
 
-        # Scene paths
-        self._scene_path = r"D:\poc\po_wiwynn_test\po_wiwynn_test_v0003.usda"
-        self._robot_prim_path = "/World/cobotta_pro_900"
-        self._cube_prim_path = "/World/geo_cube_01"
+        # Scene configuration
+        self._initial_position = np.array([-0.5, 0.4, 0.125])
+        self._target_position = np.array([-0.6, -0.5, 0.135])
+        self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
+        self._table_path = "D:/poc/po_wiwynn_test/prp_table01.usda"
 
-        # Task configuration
-        self._pickup_position = np.array([0.4, 0.3, 0.025])
-        self._place_position = np.array([-0.5, 0.3, 0.025])
-        # End-effector offset represents gripper TCP offset from base link
-        # This is the gripper geometry, not height above cube
-        self._end_effector_offset = np.array([0, 0, 0.25])  # Match working example
-        self._home_joint_positions = None
-
-        # ====================================================================
         # Create UI
-        # ====================================================================
         self._build_ui()
 
     def _build_ui(self):
-        """Build the UI window with Start/Stop controls."""
-        self._window = ui.Window("Robot Pick & Place Control", width=450, height=400)
+        """Build the UI window with Setup Scene button."""
+        self._window = ui.Window("Robot Pick & Place Setup", width=400, height=300)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
-                # ============================================================
                 # Header
-                # ============================================================
                 ui.Label(
-                    "Denso Cobotta Pick & Place Control",
+                    "Pick & Place Scene Setup",
                     style={"font_size": 22, "color": 0xFFFFFFFF},
                     alignment=ui.Alignment.CENTER,
                     height=30
@@ -116,436 +95,212 @@ class MyExtension(omni.ext.IExt):
 
                 ui.Separator()
 
-                # ============================================================
                 # Status Section
-                # ============================================================
-                with ui.CollapsableFrame("Status", height=0, collapsed=False):
-                    with ui.VStack(spacing=5):
-                        self._status_label = ui.Label(
-                            "Ready - Click 'Start' to begin",
-                            word_wrap=True,
-                            style={"font_size": 13, "color": 0xFF00DD00}
-                        )
+                with ui.VStack(spacing=10):
+                    self._status_label = ui.Label(
+                        "Ready - Click 'Setup Scene' to begin",
+                        word_wrap=True,
+                        style={"font_size": 13, "color": 0xFF00DD00},
+                        height=60
+                    )
 
-                # ============================================================
-                # Scene Configuration Section
-                # ============================================================
-                with ui.CollapsableFrame("Scene Configuration", height=0, collapsed=True):
-                    with ui.VStack(spacing=3):
-                        ui.Label(f"Scene File:", style={"font_size": 11})
-                        ui.Label(
-                            f"  {Path(self._scene_path).name}",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
+                ui.Spacer(height=10)
 
-                        ui.Spacer(height=5)
-
-                        ui.Label(f"Robot Prim:", style={"font_size": 11})
-                        ui.Label(
-                            f"  {self._robot_prim_path}",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
-
-                        ui.Spacer(height=5)
-
-                        ui.Label(f"Target Cube:", style={"font_size": 11})
-                        ui.Label(
-                            f"  {self._cube_prim_path}",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
-
-                # ============================================================
-                # Task Parameters Section
-                # ============================================================
-                with ui.CollapsableFrame("Task Parameters", height=0, collapsed=True):
+                # Scene Parameters
+                with ui.CollapsableFrame("Scene Parameters", height=0, collapsed=True):
                     with ui.VStack(spacing=3):
                         ui.Label("Pickup Position (m):", style={"font_size": 11})
                         ui.Label(
-                            f"  X: {self._pickup_position[0]:.3f}, "
-                            f"Y: {self._pickup_position[1]:.3f}, "
-                            f"Z: {self._pickup_position[2]:.3f}",
+                            f"  X: {self._initial_position[0]:.3f}, "
+                            f"Y: {self._initial_position[1]:.3f}, "
+                            f"Z: {self._initial_position[2]:.3f}",
                             style={"font_size": 10, "color": 0xFFAAAAAA}
                         )
 
                         ui.Spacer(height=5)
 
-                        ui.Label("Place Position (m):", style={"font_size": 11})
+                        ui.Label("Target Position (m):", style={"font_size": 11})
                         ui.Label(
-                            f"  X: {self._place_position[0]:.3f}, "
-                            f"Y: {self._place_position[1]:.3f}, "
-                            f"Z: {self._place_position[2]:.3f}",
+                            f"  X: {self._target_position[0]:.3f}, "
+                            f"Y: {self._target_position[1]:.3f}, "
+                            f"Z: {self._target_position[2]:.3f}",
                             style={"font_size": 10, "color": 0xFFAAAAAA}
                         )
 
                 ui.Spacer(height=10)
 
-                # ============================================================
-                # Control Buttons
-                # ============================================================
-                ui.Label("Controls:", style={"font_size": 14})
-
-                with ui.HStack(spacing=10):
-                    self._start_button = ui.Button(
-                        "Start Pick & Place",
-                        clicked_fn=self._on_start_clicked,
-                        height=50,
-                        style={
-                            "Button": {
-                                "background_color": 0xFF228822,
-                                "border_radius": 5,
-                                "font_size": 16
-                            }
+                # Setup Button
+                self._setup_button = ui.Button(
+                    "Setup Scene",
+                    clicked_fn=self._on_setup_clicked,
+                    height=60,
+                    style={
+                        "Button": {
+                            "background_color": 0xFF228822,
+                            "border_radius": 5,
+                            "font_size": 18
                         }
-                    )
-
-                    self._stop_button = ui.Button(
-                        "Stop",
-                        clicked_fn=self._on_stop_clicked,
-                        height=50,
-                        enabled=False,
-                        style={
-                            "Button": {
-                                "background_color": 0xFF882222,
-                                "border_radius": 5,
-                                "font_size": 16
-                            }
-                        }
-                    )
+                    }
+                )
 
                 ui.Spacer(height=10)
 
-                # ============================================================
-                # Utility Buttons
-                # ============================================================
-                with ui.HStack(spacing=10):
-                    ui.Button(
-                        "Reset Scene",
-                        clicked_fn=self._on_reset_scene_clicked,
-                        height=35,
-                        style={"Button": {"background_color": 0xFF555555}}
+                # Instructions
+                with ui.VStack(spacing=3):
+                    ui.Label("Instructions:", style={"font_size": 12, "color": 0xFFAAAAFF})
+                    ui.Label(
+                        "1. Click 'Setup Scene' to configure the scene",
+                        style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
-
-                    ui.Button(
-                        "Return to Home",
-                        clicked_fn=self._on_return_home_clicked,
-                        height=35,
-                        style={"Button": {"background_color": 0xFF555555}}
+                    ui.Label(
+                        "2. Press PLAY button in Isaac Sim to start",
+                        style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
 
     def on_shutdown(self):
         """Clean up extension resources."""
         print("[RobotPickup] Extension shutdown")
 
-        # Stop simulation
-        if self._is_running:
-            self._stop_simulation()
-
-        # Unsubscribe from updates
-        if self._subscription:
-            self._subscription.unsubscribe()
-            self._subscription = None
-
-        # Clear world
-        if self._world:
-            self._world.clear()
-            self._world = None
+        # Unsubscribe from physics
+        if self._physics_subscription:
+            self._physics_subscription.unsubscribe()
+            self._physics_subscription = None
 
         # Close window
         if self._window:
             self._window.destroy()
             self._window = None
 
-    # ========================================================================
-    # UI Callbacks
-    # ========================================================================
+    def _on_setup_clicked(self):
+        """Handle Setup Scene button - Set up the entire pick-and-place scene."""
+        print("[RobotPickup] Setup Scene button clicked")
 
-    def _on_start_clicked(self):
-        """Handle Start button - Initialize scene and begin pick-and-place."""
-        print("[RobotPickup] Start button clicked")
-
-        # Initialize if not done
-        if not self._world:
-            asyncio.ensure_future(self._initialize_scene_async())
-        else:
-            self._start_simulation()
-
-    def _on_stop_clicked(self):
-        """Handle Stop button - Stop simulation immediately."""
-        print("[RobotPickup] Stop button clicked")
-        self._stop_simulation()
-
-    def _on_reset_scene_clicked(self):
-        """Handle Reset Scene button - Reload scene from USD file."""
-        print("[RobotPickup] Reset scene clicked")
-
-        if self._is_running:
-            self._stop_simulation()
-
-        asyncio.ensure_future(self._reset_scene_async())
-
-    def _on_return_home_clicked(self):
-        """Handle Return Home button - Move robot to home position."""
-        print("[RobotPickup] Return home clicked")
-
-        if not self._robot or not self._home_joint_positions:
-            self._update_status("Error: Robot not initialized", error=True)
+        if self._scene_setup_complete:
+            self._update_status("Scene already set up. Press PLAY to start.", error=False)
             return
 
-        # Set robot to home positions
-        self._robot.set_joint_positions(self._home_joint_positions)
-        self._update_status("Returned to home position", error=False)
-
-    # ========================================================================
-    # Scene Initialization
-    # ========================================================================
-
-    async def _initialize_scene_async(self):
-        """Initialize scene asynchronously."""
         try:
-            self._update_status("Loading scene file...", error=False)
+            self._update_status("Setting up scene...", error=False)
 
-            # Check file exists
-            if not Path(self._scene_path).exists():
-                self._update_status(f"Error: Scene file not found!", error=True)
+            # Check if required classes are available
+            if not PickPlaceSceneSetup or not PickPlaceController:
+                self._update_status("Error: Required modules not available!", error=True)
                 return
 
-            # Load USD stage
-            print(f"[RobotPickup] Loading: {self._scene_path}")
-            open_stage(self._scene_path)
+            print("="*70)
+            print("PICK AND PLACE SETUP")
+            print("="*70)
 
-            await asyncio.sleep(0.5)  # Let stage load
-
-            # Create World (don't add physics - already in USD)
-            self._update_status("Creating simulation world...", error=False)
-            # self._world = World(stage_units_in_meters=1.0, add_ground_plane=False)
-            self._world = World(stage_units_in_meters=1.0)
-
-            # Configure robot
-            self._update_status("Configuring robot...", error=False)
-            if not await self._setup_robot_async():
-                self._update_status("Error: Robot setup failed!", error=True)
-                return
-
-            # Reset world
-            self._update_status("Initializing physics...", error=False)
-            await self._world.reset_async()
-
-            # Initialize gripper AFTER world reset
-            self._update_status("Initializing gripper...", error=False)
-            self._gripper.initialize(
-                articulation_apply_action_func=self._robot.apply_action,
-                get_joint_positions_func=self._robot.get_joint_positions,
-                set_joint_positions_func=self._robot.set_joint_positions,
-                dof_names=self._robot.dof_names
+            # Create setup helper
+            print("\n→ Setting up scene...")
+            self._setup = PickPlaceSceneSetup(
+                custom_usd_path=self._custom_usd_path,
+                object_initial_position=self._initial_position,
+                target_position=self._target_position
             )
 
-            # Get articulation controller
+            # Add table
+            self._update_status("Adding table...", error=False)
+            add_reference_to_stage(usd_path=self._table_path, prim_path="/World/Table")
+
+            # Create robot
+            self._update_status("Creating robot...", error=False)
+            print("  → Creating robot...")
+            self._robot = self._setup.create_robot()
+
+            # Create pickup object
+            self._update_status("Creating pickup object...", error=False)
+            print("  → Creating pickup object...")
+            self._setup.create_object(mass=0.01)  # 10 grams
+
+            # Create target marker
+            self._update_status("Creating target marker...", error=False)
+            print("  → Creating target marker...")
+            self._setup.create_target_marker()
+
+            print("✓ Scene setup complete")
+
+            # Initialize controller
+            self._update_status("Initializing controller...", error=False)
+            print("\n→ Initializing controller...")
+
+            self._controller = PickPlaceController(
+                name="pick_place_controller",
+                robot_articulation=self._robot,
+                gripper=self._robot.gripper
+            )
+
             self._articulation_controller = self._robot.get_articulation_controller()
 
-            # Create pick-place controller if available
-            # CRITICAL: Use robot.gripper (not self._gripper) to match working example
-            if PickPlaceController:
-                self._controller = PickPlaceController(
-                    name="controller",
-                    robot_articulation=self._robot,
-                    gripper=self._robot.gripper  # Use gripper from robot object
-                )
-                print("[RobotPickup] PickPlaceController initialized with robot.gripper")
-            else:
-                print("[RobotPickup] Warning: PickPlaceController not available")
+            print("✓ Controller ready")
 
-            # Store home position
-            self._home_joint_positions = self._robot.get_joint_positions()
-            print(f"[RobotPickup] Home position: {self._home_joint_positions}")
+            # Subscribe to physics updates
+            self._update_status("Setting up physics subscription...", error=False)
+            self._physics_subscription = _physx.get_physx_interface().subscribe_physics_step_events(
+                self._simulation_step
+            )
 
-            self._update_status("Ready - Click Start to begin", error=False)
+            self._scene_setup_complete = True
+            self._setup_button.enabled = False
 
-            # Auto-start
-            await asyncio.sleep(1.0)
-            self._start_simulation()
+            print("\n" + "="*70)
+            print("READY")
+            print("="*70)
+            print("→ Press ▶ PLAY button in Isaac Sim to start")
+            print("="*70)
+
+            self._update_status(
+                "Setup complete! Press PLAY button in Isaac Sim to start simulation.",
+                error=False
+            )
 
         except Exception as e:
             self._update_status(f"Error: {str(e)}", error=True)
-            print(f"[RobotPickup] Initialization error: {e}")
+            print(f"[RobotPickup] Setup error: {e}")
             import traceback
             traceback.print_exc()
 
-    async def _setup_robot_async(self) -> bool:
-        """Configure robot with gripper."""
-        try:
-            # Configure gripper
-            self._gripper = ParallelGripper(
-                end_effector_prim_path=f"{self._robot_prim_path}/onrobot_rg6_base_link",
-                joint_prim_names=["finger_joint", "right_outer_knuckle_joint"],
-                joint_opened_positions=np.array([0, 0]),
-                joint_closed_positions=np.array([0.628, -0.628]),
-                action_deltas=np.array([-0.2, 0.2])
-            )
+    def _simulation_step(self, step_size):
+        """Called every physics step when simulation is playing."""
 
-            # Create robot manipulator
-            robot_name = "cobotta_robot"
-
-            # Remove existing robot from scene if it exists
-            if self._world.scene.object_exists(robot_name):
-                print(f"[RobotPickup] Removing existing robot '{robot_name}' from scene")
-                self._world.scene.remove_object(robot_name)
-
-            self._robot = SingleManipulator(
-                prim_path=self._robot_prim_path,
-                name=robot_name,
-                end_effector_prim_name="onrobot_rg6_base_link",
-                gripper=self._gripper
-            )
-
-            # Add to scene
-            self._world.scene.add(self._robot)
-
-            # Set default joint positions (gripper slightly open)
-            # This matches pick_place.py configuration
-            joints_default_positions = np.zeros(12)  # 6 arm joints + 6 gripper joints
-            joints_default_positions[7] = 0.628   # left_outer_knuckle_joint
-            joints_default_positions[8] = 0.628   # left_inner_knuckle_joint
-            self._robot.set_joints_default_state(positions=joints_default_positions)
-
-            print("[RobotPickup] Robot added to scene with default joint positions")
-            return True
-
-        except Exception as e:
-            print(f"[RobotPickup] Robot setup error: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    async def _reset_scene_async(self):
-        """Reset scene asynchronously."""
-        self._update_status("Resetting scene...", error=False)
-
-        # Clear world
-        if self._world:
-            self._world.clear()
-            self._world = None
-
-        # Reinitialize
-        await self._initialize_scene_async()
-
-    # ========================================================================
-    # Simulation Control
-    # ========================================================================
-
-    def _start_simulation(self):
-        """Start the pick-and-place simulation."""
-        if not self._robot or not self._controller:
-            self._update_status("Error: System not initialized!", error=True)
-            return
-
-        self._is_running = True
-        self._task_complete = False
-
-        # Reset controller
-        self._controller.reset()
-
-        # Update UI
-        self._start_button.enabled = False
-        self._stop_button.enabled = True
-        self._update_status("Running: Pick and place in progress...", error=False)
-
-        # Subscribe to physics updates
-        from omni.isaac.core.utils.extensions import get_extension_path_from_name
-        self._subscription = (
-            omni.physx.get_physx_interface()
-            .subscribe_physics_step_events(self._on_physics_step)
-        )
-
-        # Start physics
-        self._world.play()
-
-        print("[RobotPickup] Simulation started")
-
-    def _stop_simulation(self):
-        """Stop the simulation."""
-        self._is_running = False
-
-        # Unsubscribe
-        if self._subscription:
-            self._subscription.unsubscribe()
-            self._subscription = None
-
-        # Pause physics
-        if self._world:
-            self._world.pause()
-
-        # Update UI
-        self._start_button.enabled = True
-        self._stop_button.enabled = False
-        self._update_status("Stopped", error=False)
-
-        print("[RobotPickup] Simulation stopped")
-
-    def _on_physics_step(self, dt):
-        """Called every physics step while simulation is running."""
-        if not self._is_running or not self._controller:
-            return
-
-        try:
-            # Reset controller on simulation restart (matches working example)
-            if self._world.current_time_step_index == 0:
-                print("[RobotPickup] Resetting controller on simulation restart")
+        # One-time initialization when timeline starts
+        if not self._initialized:
+            try:
+                self._robot.initialize()
                 self._controller.reset()
+                self._initialized = True
+                print("\n✓ System initialized")
+                print("="*70)
+                print("RUNNING PICK AND PLACE")
+                print("="*70)
+                self._update_status("Running: Pick and place in progress...", error=False)
+            except Exception as e:
+                # Wait for physics context
+                return
 
-            # Get current joint positions
-            current_joint_positions = self._robot.get_joint_positions()
+        # Main control loop
+        try:
+            # Get observations
+            observations = self._setup.get_observations(self._robot)
 
-            # Get end-effector position for debugging
-            ee_position, ee_orientation = self._robot.end_effector.get_world_pose()
-
-            # Log periodically (every 60 frames ~ 1 second)
-            if not hasattr(self, '_debug_counter'):
-                self._debug_counter = 0
-            self._debug_counter += 1
-            if self._debug_counter % 60 == 0:
-                print(f"[RobotPickup] EE Position: {ee_position}, Target: {self._pickup_position}")
-                print(f"[RobotPickup] Controller state: {self._controller._cspace_controller._current_state if hasattr(self._controller._cspace_controller, '_current_state') else 'unknown'}")
-
-            # Compute actions from controller
+            # Compute actions
             actions = self._controller.forward(
-                picking_position=self._pickup_position,
-                placing_position=self._place_position,
-                current_joint_positions=current_joint_positions,
-                end_effector_offset=self._end_effector_offset
+                picking_position=observations["pickup_object"]["position"],
+                placing_position=observations["pickup_object"]["target_position"],
+                current_joint_positions=observations["cobotta_robot"]["joint_positions"],
+                end_effector_offset=np.array([0, 0, 0.25]),
             )
+
+            # Check completion
+            if self._controller.is_done():
+                print("✓ Pick and place complete!")
+                self._update_status("Task complete!", error=False)
 
             # Apply actions
-            if actions and self._articulation_controller:
-                self._articulation_controller.apply_action(actions)
-
-            # Check if task is complete
-            if self._controller.is_done() and not self._task_complete:
-                self._task_complete = True
-                self._update_status("Task complete! Returning to home...", error=False)
-
-                # Return to home after brief delay
-                asyncio.ensure_future(self._return_to_home_async())
+            self._articulation_controller.apply_action(actions)
 
         except Exception as e:
-            print(f"[RobotPickup] Physics step error: {e}")
-
-    async def _return_to_home_async(self):
-        """Return robot to home position after task completion."""
-        await asyncio.sleep(2.0)  # Wait 2 seconds
-
-        if self._home_joint_positions is not None:
-            # Gradually move to home
-            self._robot.set_joint_positions(self._home_joint_positions)
-
-            await asyncio.sleep(3.0)  # Allow time to reach home
-
-        # Stop simulation
-        self._stop_simulation()
-        self._update_status("Complete! Robot returned to home. Click Start to repeat.", error=False)
-
-    # ========================================================================
-    # UI Helpers
-    # ========================================================================
+            print(f"Error in control loop: {e}")
 
     def _update_status(self, message: str, error: bool = False):
         """Update status label."""
