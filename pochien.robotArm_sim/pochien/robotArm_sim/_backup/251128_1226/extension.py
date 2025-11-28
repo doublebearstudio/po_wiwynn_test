@@ -1,14 +1,8 @@
 """
-Robot Arm Simulation Extension - Simplified Single Button Version
+Robot Arm Simulation Extension
 
-This extension provides a single button to set up the entire pick-and-place scene.
-After clicking the button, manually press PLAY in Isaac Sim timeline to start the simulation.
-
-Usage:
-1. Click "Setup Pick & Place Scene" button
-2. Wait for setup to complete
-3. Press PLAY (▶) button in Isaac Sim timeline
-4. Watch the robot perform pick and place
+Simple extension for pick-and-place tasks using the simplified setup approach.
+Uses PickPlaceSceneSetup class for easy scene configuration.
 """
 
 import omni.ext
@@ -32,13 +26,11 @@ import omni.physx as _physx
 
 
 class RobotArmSimulationExtension(omni.ext.IExt):
-    """Robot Arm Simulation Extension - Single button setup."""
+    """Robot Arm Simulation Extension with simplified setup."""
 
     def on_startup(self, ext_id: str):
         """Initialize the extension and create UI."""
-        print("="*70)
-        print("ROBOT ARM SIMULATION EXTENSION - STARTUP")
-        print("="*70)
+        print("[RobotArmSim] Extension startup")
 
         # State variables
         self._setup = None
@@ -47,6 +39,7 @@ class RobotArmSimulationExtension(omni.ext.IExt):
         self._articulation_controller = None
         self._physics_subscription = None
         self._timeline = get_timeline_interface()
+        self._scene_setup_complete = False
         self._initialized = False
         self._was_playing = False
 
@@ -61,13 +54,13 @@ class RobotArmSimulationExtension(omni.ext.IExt):
 
     def _build_ui(self):
         """Build the UI window."""
-        self._window = ui.Window("Robot Arm Simulation", width=400, height=250)
+        self._window = ui.Window("Robot Arm Simulation", width=400, height=300)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
                 # Title
                 ui.Label(
-                    "Pick & Place Simulation",
+                    "Robot Arm Simulation",
                     style={"font_size": 24, "color": 0xFFFFFFFF},
                     alignment=ui.Alignment.CENTER,
                     height=40
@@ -75,35 +68,22 @@ class RobotArmSimulationExtension(omni.ext.IExt):
 
                 ui.Separator()
 
-                # Instructions
-                with ui.VStack(spacing=5):
-                    ui.Label("Instructions:", style={"font_size": 14, "color": 0xFFAAAA00})
-                    ui.Label(
-                        "1. Click 'Setup Pick & Place Scene'\n"
-                        "2. Press PLAY (▶) in Isaac Sim timeline\n"
-                        "3. Watch the robot work!",
-                        word_wrap=True,
-                        style={"font_size": 11, "color": 0xFFCCCCCC}
-                    )
-
-                ui.Spacer(height=5)
-
                 # Status
                 with ui.VStack(spacing=5):
                     ui.Label("Status:", style={"font_size": 14})
                     self._status_label = ui.Label(
-                        "Ready to setup scene",
+                        "Ready - Click 'Set Up Scene' to begin",
                         word_wrap=True,
                         style={"font_size": 12, "color": 0xFF00DD00}
                     )
 
                 ui.Spacer(height=10)
 
-                # Main Setup Button
+                # Set Up Scene Button
                 self._setup_button = ui.Button(
-                    "Setup Pick & Place Scene",
-                    clicked_fn=self._on_setup_clicked,
-                    height=70,
+                    "Set Up Scene",
+                    clicked_fn=self._on_setup_scene_clicked,
+                    height=60,
                     style={
                         "Button": {
                             "background_color": 0xFF2277FF,
@@ -115,10 +95,30 @@ class RobotArmSimulationExtension(omni.ext.IExt):
 
                 ui.Spacer(height=10)
 
-                # Reset Button
+                # Start Task Button
+                self._start_button = ui.Button(
+                    "Start Task",
+                    clicked_fn=self._on_start_task_clicked,
+                    height=60,
+                    enabled=False,
+                    style={
+                        "Button": {
+                            "background_color": 0xFF228822,
+                            "border_radius": 5,
+                            "font_size": 18
+                        },
+                        "Button:disabled": {
+                            "background_color": 0xFF555555
+                        }
+                    }
+                )
+
+                ui.Spacer(height=10)
+
+                # Reset Scene Button
                 self._reset_button = ui.Button(
                     "Reset Scene",
-                    clicked_fn=self._on_reset_clicked,
+                    clicked_fn=self._on_reset_scene_clicked,
                     height=40,
                     style={
                         "Button": {
@@ -147,42 +147,37 @@ class RobotArmSimulationExtension(omni.ext.IExt):
     # Button Callbacks
     # ========================================================================
 
-    def _on_setup_clicked(self):
-        """Handle Setup button - Creates the entire scene and subscribes to physics."""
-        print("\n" + "="*70)
-        print("SETTING UP PICK AND PLACE SCENE")
-        print("="*70)
+    def _on_setup_scene_clicked(self):
+        """Handle Set Up Scene button - Creates the scene."""
+        print("[RobotArmSim] Setting up scene...")
         self._update_status("Setting up scene...")
 
         try:
             # Create setup helper
-            print("→ Setting up scene...")
             self._setup = PickPlaceSceneSetup(
                 custom_usd_path=self._custom_usd_path,
                 object_initial_position=self._initial_position,
                 target_position=self._target_position
             )
 
-            # Add table (optional)
-            print("  → Adding table...")
+            # Add table
+            print("[RobotArmSim] Adding table...")
             add_reference_to_stage(usd_path=self._table_path, prim_path="/World/Table")
 
             # Create robot
-            print("  → Creating robot...")
+            print("[RobotArmSim] Creating robot...")
             self._robot = self._setup.create_robot()
 
             # Create pickup object
-            print("  → Creating pickup object...")
-            self._setup.create_object(mass=0.01)  # 10 grams
+            print("[RobotArmSim] Creating pickup object...")
+            self._setup.create_object(mass=0.01)
 
             # Create target marker
-            print("  → Creating target marker...")
+            print("[RobotArmSim] Creating target marker...")
             self._setup.create_target_marker()
 
-            print("✓ Scene setup complete")
-
             # Initialize controller
-            print("\n→ Initializing controller...")
+            print("[RobotArmSim] Initializing controller...")
             self._controller = PickPlaceController(
                 name="pick_place_controller",
                 robot_articulation=self._robot,
@@ -190,134 +185,134 @@ class RobotArmSimulationExtension(omni.ext.IExt):
             )
 
             self._articulation_controller = self._robot.get_articulation_controller()
-            print("✓ Controller ready")
+
+            # Unsubscribe from any existing physics subscription (safety check)
+            if self._physics_subscription:
+                print("[RobotArmSim] Warning: Cleaning up old physics subscription")
+                self._physics_subscription.unsubscribe()
+                self._physics_subscription = None
 
             # Subscribe to physics updates
-            print("\n→ Subscribing to physics updates...")
-            if self._physics_subscription:
-                print("  Warning: Cleaning up old physics subscription")
-                self._physics_subscription.unsubscribe()
-
             self._physics_subscription = _physx.get_physx_interface().subscribe_physics_step_events(
                 self._on_physics_step
             )
 
-            print("\n" + "="*70)
-            print("READY")
-            print("="*70)
-            print("→ Press ▶ PLAY button in timeline to start")
-            print("="*70 + "\n")
+            self._scene_setup_complete = True
+            self._update_status("Scene setup complete! Click 'Start Task' to begin.")
 
-            self._update_status("✓ Setup complete! Press PLAY (▶) in timeline to start")
-
-            # Disable setup button after successful setup
+            # Enable Start Task button
+            self._start_button.enabled = True
             self._setup_button.enabled = False
+
+            print("[RobotArmSim] Scene setup complete")
 
         except Exception as e:
             self._update_status(f"Error: {str(e)}", error=True)
-            print(f"\n✗ Setup error: {e}")
+            print(f"[RobotArmSim] Setup error: {e}")
             import traceback
             traceback.print_exc()
 
             # Clean up on error
             self._reset_scene()
 
-    def _on_reset_clicked(self):
-        """Handle Reset button - Resets the entire scene."""
-        print("\n" + "="*70)
-        print("RESETTING SCENE")
-        print("="*70)
+    def _on_start_task_clicked(self):
+        """Handle Start Task button - Starts/stops the simulation."""
+        if not self._scene_setup_complete:
+            self._update_status("Error: Scene not set up!", error=True)
+            return
+
+        # Check current timeline state
+        is_playing = self._timeline.is_playing()
+
+        if is_playing:
+            # Currently playing - stop it
+            print("[RobotArmSim] Stopping simulation...")
+            self._timeline.stop()
+
+            # Clean up task resources
+            self._cleanup_task()
+
+            self._start_button.text = "Start Task"
+            self._update_status("Simulation stopped - Task cleaned up")
+        else:
+            # Currently stopped - start it
+            print("[RobotArmSim] Starting simulation...")
+            self._timeline.play()
+            self._start_button.text = "Stop Task"
+            self._update_status("Simulation running...")
+
+    def _on_reset_scene_clicked(self):
+        """Handle Reset Scene button - Resets the entire scene."""
+        print("[RobotArmSim] Reset Scene button clicked")
 
         # Stop timeline if playing
         if self._timeline.is_playing():
-            print("→ Stopping timeline...")
             self._timeline.stop()
 
         # Reset everything
         self._reset_scene()
 
-        self._update_status("Scene reset - Ready to setup again")
-        print("✓ Scene reset complete\n")
+        self._update_status("Scene reset - Click 'Set Up Scene' to begin")
 
     # ========================================================================
     # Physics Step Callback
     # ========================================================================
 
     def _on_physics_step(self, step_size):
-        """
-        Called every physics step.
+        """Called every physics step."""
+        if not self._scene_setup_complete:
+            return
 
-        This method performs the same logic as simulation_step() in pick_up_script_editor.py:
-        - Detects timeline state changes (play/stop)
-        - Initializes robot and controller when timeline starts
-        - Runs the main control loop to execute pick and place actions
-        """
-        # is_playing: Current state of the timeline (True if simulation is running, False if paused/stopped).
-        #             Used to detect timeline state changes and control when to run the control loop.
+        # Detect timeline stop/start cycle
         is_playing = self._timeline.is_playing()
 
-        # Check if timeline is stopped - this prevents control loop execution when paused
-        # and handles cleanup when user stops the simulation
         if not is_playing:
-            # Detect transition from playing to stopped (self._was_playing=True, now is_playing=False)
-            # This ensures we reset initialization when user stops and restarts the simulation
+            # Timeline stopped - reset initialization flag
             if self._was_playing:
-                self._initialized = False  # Force re-initialization on next play
-                self._was_playing = False  # Update state tracker
-            return  # Exit early - don't run control loop when timeline is stopped
+                self._initialized = False
+                self._was_playing = False
+            return
 
-        # Timeline is playing - update state tracker for next cycle
-        # This remembers the current playing state so we can detect transitions on the next frame
+        # Timeline is playing
         self._was_playing = True
 
-        # Initialize system when timeline first starts playing or after a stop/start cycle
-        # This block only runs once per play session (when self._initialized=False)
+        # Initialize/re-initialize when timeline starts
         if not self._initialized:
-            # Try-except wrapper: Isaac Sim's physics context may not be fully ready immediately
-            # after pressing play. This catches initialization errors and retries on next frame.
             try:
-                # Initialize the robot's physics articulation
+                # Initialize robot (creates the physics view)
                 self._robot.initialize()
 
-                # Wait for physics view to be created - the physics system needs a frame or two
-                # to fully instantiate all physics objects before we can query joint positions
+                # Wait for physics view to be created
                 joint_positions = self._robot.get_joint_positions()
-
-                # Check if physics view is ready (returns None if not yet created)
-                # This prevents errors from trying to control a robot before physics is active
                 if joint_positions is None:
                     # Physics view not ready yet, try again next frame
                     return
 
-                # Physics view is ready, now initialize controller with current robot state
+                # Physics view is ready, now initialize controller
                 self._controller.reset()
-                self._initialized = True  # Mark as initialized to skip this block in future frames
-
-                print("\n✓ System initialized")
-                print("="*70)
-                print("RUNNING PICK AND PLACE")
-                print("="*70)
+                self._initialized = True
+                print("[RobotArmSim] System initialized and running")
                 self._update_status("Running pick and place task...")
-
+            except AttributeError:
+                # Physics context not ready yet - this is normal at startup
+                # Silently wait and try again next frame
+                return
             except Exception as e:
-                # Catch any initialization errors (e.g., physics context not ready, missing prims)
-                # and retry on the next physics step instead of crashing
-                print(f"Waiting for initialization: {e}")
+                # Other unexpected errors - log them
+                print(f"[RobotArmSim] Initialization error: {e}")
+                import traceback
+                traceback.print_exc()
                 return
 
-        # Main control loop - runs every physics step after initialization
-        # Try-except wrapper: Protects against runtime errors in the control loop
-        # (e.g., robot moved out of bounds, physics instability, unexpected state changes)
+        # Main control loop
         try:
             # Get joint positions
             joint_positions = self._robot.get_joint_positions()
 
-            # Safety check: Verify physics view is still valid
-            # This shouldn't happen after initialization, but protects against edge cases
-            # like physics reset, robot deletion, or other unexpected state changes
+            # Safety check
             if joint_positions is None:
-                print("Warning: Physics view lost, re-initializing...")
-                self._initialized = False  # Trigger re-initialization on next frame
+                print("[RobotArmSim] Warning: Physics view lost, re-initializing...")
+                self._initialized = False
                 return
 
             # Get observations
@@ -331,50 +326,67 @@ class RobotArmSimulationExtension(omni.ext.IExt):
                 end_effector_offset=np.array([0, 0, 0.25]),
             )
 
-            # Check if the pick and place sequence has completed
-            # This is an informational check - the controller continues running safely after completion
+            # Check completion
             if self._controller.is_done():
-                print("✓ Pick and place complete!")
-                self._update_status("✓ Task complete!")
+                print("[RobotArmSim] Pick and place complete!")
+                self._update_status("Task complete!")
 
             # Apply actions
             self._articulation_controller.apply_action(actions)
 
         except Exception as e:
-            # Catch any runtime errors in the control loop to prevent script crashes
-            # Errors continue to be logged but don't stop the simulation
-            print(f"Error in control loop: {e}")
+            print(f"[RobotArmSim] Error in control loop: {e}")
             import traceback
             traceback.print_exc()
+
+            # Stop timeline and clean up on critical error
+            self._update_status(f"Error: {str(e)}", error=True)
+            self._timeline.stop()
+            if self._physics_subscription:
+                self._physics_subscription.unsubscribe()
+                self._physics_subscription = None
+            self._initialized = False
+            self._start_button.text = "Start Task"
 
     # ========================================================================
     # Cleanup Methods
     # ========================================================================
 
-    def _reset_scene(self):
-        """Reset scene setup to allow re-initialization."""
-        print("→ Cleaning up resources...")
+    def _cleanup_task(self):
+        """Clean up task resources and reset state."""
+        print("[RobotArmSim] Cleaning up task...")
 
         # Unsubscribe from physics updates
         if self._physics_subscription:
             self._physics_subscription.unsubscribe()
             self._physics_subscription = None
-            print("  → Physics subscription removed")
+            print("[RobotArmSim] Physics subscription removed")
 
         # Reset state flags
         self._initialized = False
         self._was_playing = False
+
+        print("[RobotArmSim] Task cleaned up")
+
+    def _reset_scene(self):
+        """Reset scene setup to allow re-initialization."""
+        print("[RobotArmSim] Resetting scene...")
+
+        # Clean up task first
+        self._cleanup_task()
 
         # Reset scene objects
         self._setup = None
         self._robot = None
         self._controller = None
         self._articulation_controller = None
+        self._scene_setup_complete = False
 
         # Re-enable setup button
         self._setup_button.enabled = True
+        self._start_button.enabled = False
 
-        print("→ All resources cleaned up")
+        print("[RobotArmSim] Scene reset complete")
 
     # ========================================================================
     # Helper Methods

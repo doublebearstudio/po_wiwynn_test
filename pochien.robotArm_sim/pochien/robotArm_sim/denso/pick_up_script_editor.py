@@ -89,58 +89,84 @@ print("✓ Controller ready")
 # 4. Control Loop Setup
 # ============================================================================
 timeline = get_timeline_interface()
+
+# State tracking variables:
+# - initialized: Tracks whether the robot and controller have been successfully initialized.
+#                Set to True after robot.initialize() and controller.reset() complete successfully.
+#                Reset to False when timeline stops, so re-initialization happens on next play.
 initialized = False
+
+# - was_playing: Stores the previous timeline state to detect state transitions.
+#                Used to detect when the timeline transitions from playing to stopped,
+#                which triggers re-initialization on the next play cycle.
 was_playing = False
 
 def simulation_step(step_size):
     """Called every physics step"""
     global initialized, was_playing
 
-    # Detect timeline stop/start cycle
+    # is_playing: Current state of the timeline (True if simulation is running, False if paused/stopped).
+    #             Used to detect timeline state changes and control when to run the control loop.
     is_playing = timeline.is_playing()
 
+    # Check if timeline is stopped - this prevents control loop execution when paused
+    # and handles cleanup when user stops the simulation
     if not is_playing:
-        # Timeline stopped - reset initialization flag
+        # Detect transition from playing to stopped (was_playing=True, now is_playing=False)
+        # This ensures we reset initialization when user stops and restarts the simulation
         if was_playing:
-            initialized = False
-            was_playing = False
-        return
+            initialized = False  # Force re-initialization on next play
+            was_playing = False  # Update state tracker
+        return  # Exit early - don't run control loop when timeline is stopped
 
-    # Timeline is playing
+    # Timeline is playing - update state tracker for next cycle
     was_playing = True
 
-    # Initialize/re-initialize when timeline starts
+    # Initialize system when timeline first starts playing or after a stop/start cycle
+    # This block only runs once per play session (when initialized=False)
     if not initialized:
+        # Try-except wrapper: Isaac Sim's physics context may not be fully ready immediately
+        # after pressing play. This catches initialization errors and retries on next frame.
         try:
+            # Initialize the robot's physics articulation
             robot.initialize()
 
-            # Wait for physics view to be created
+            # Wait for physics view to be created - the physics system needs a frame or two
+            # to fully instantiate all physics objects before we can query joint positions
             joint_positions = robot.get_joint_positions()
+
+            # Check if physics view is ready (returns None if not yet created)
+            # This prevents errors from trying to control a robot before physics is active
             if joint_positions is None:
                 # Physics view not ready yet, try again next frame
                 return
 
-            # Physics view is ready, now initialize controller
+            # Physics view is ready, now initialize controller with current robot state
             controller.reset()
-            initialized = True
+            initialized = True  # Mark as initialized to skip this block in future frames
             print("\n✓ System initialized")
             print("="*70)
             print("RUNNING PICK AND PLACE")
             print("="*70)
         except Exception as e:
-            # Wait for physics context
+            # Catch any initialization errors (e.g., physics context not ready, missing prims)
+            # and retry on the next physics step instead of crashing
             print(f"Waiting for initialization: {e}")
             return
 
-    # Main control loop
+    # Main control loop - runs every physics step after initialization
+    # Try-except wrapper: Protects against runtime errors in the control loop
+    # (e.g., robot moved out of bounds, physics instability, unexpected state changes)
     try:
         # Get joint positions
         joint_positions = robot.get_joint_positions()
 
-        # Safety check (shouldn't happen after initialization, but just in case)
+        # Safety check: Verify physics view is still valid
+        # This shouldn't happen after initialization, but protects against edge cases
+        # like physics reset, robot deletion, or other unexpected state changes
         if joint_positions is None:
             print("Warning: Physics view lost, re-initializing...")
-            initialized = False
+            initialized = False  # Trigger re-initialization on next frame
             return
 
         # Get observations
@@ -154,7 +180,8 @@ def simulation_step(step_size):
             end_effector_offset=np.array([0, 0, 0.25]),
         )
 
-        # Check completion
+        # Check if the pick and place sequence has completed
+        # This is an informational check - the controller continues running safely after completion
         if controller.is_done():
             print("✓ Pick and place complete!")
 
@@ -162,6 +189,8 @@ def simulation_step(step_size):
         articulation_controller.apply_action(actions)
 
     except Exception as e:
+        # Catch any runtime errors in the control loop to prevent script crashes
+        # Errors continue to be logged but don't stop the simulation
         print(f"Error in control loop: {e}")
 
 # Subscribe to physics updates
