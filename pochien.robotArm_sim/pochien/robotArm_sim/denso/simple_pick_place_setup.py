@@ -72,7 +72,7 @@ class PickPlaceSceneSetup:
             SingleManipulator: The configured robot manipulator
         """
         # Load robot USD
-        robot_asset = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Robots/Denso/cobotta_pro_900.usd"
+        robot_asset = "D:/poc/po_wiwynn_test/pochien.robotArm_sim/data/robot_data/denso/cobotta_pro_900/cobotta_pro_900.usd"
         add_reference_to_stage(usd_path=robot_asset, prim_path=self.robot_prim_path)
 
         # Configure gripper

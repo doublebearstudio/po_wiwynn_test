@@ -5,9 +5,9 @@ from isaacsim.core.prims import Articulation
 class RMPFlowController(mg.MotionPolicyController):
     def __init__(self, name: str, robot_articulation: Articulation, physics_dt: float = 1.0 / 60.0) -> None:
         # TODO: change the follow paths
-        self.rmpflow = mg.lula.motion_policies.RmpFlow(robot_description_path="D:/poc/po_wiwynn_test/pochien.robotArm_sim/pochien/robotArm_sim/denso/robot_descriptor.yaml",
-                                                        rmpflow_config_path="D:/poc/po_wiwynn_test/pochien.robotArm_sim/pochien/robotArm_sim/denso/denso_rmpflow_common.yaml",
-                                                        urdf_path="D:/isaac_sim_v4_5_0/extscache/isaacsim.asset.importer.urdf-2.3.10+106.4.0.wx64.r.cp310/data/urdf/robots/cobotta_pro_900/cobotta_pro_900.urdf",
+        self.rmpflow = mg.lula.motion_policies.RmpFlow(robot_description_path="D:/poc/po_wiwynn_test/pochien.robotArm_sim/data/robot_data/denso/cobotta_pro_900/robot_descriptor.yaml",
+                                                        rmpflow_config_path="D:/poc/po_wiwynn_test/pochien.robotArm_sim/data/robot_data/denso/cobotta_pro_900/rmpflow_common.yaml",
+                                                        urdf_path="D:/poc/po_wiwynn_test/pochien.robotArm_sim/data/robot_data/denso/cobotta_pro_900/cobotta_pro_900.urdf",
                                                         end_effector_frame_name="onrobot_rg6_base_link",
                                                         maximum_substep_size=0.00334)
 
