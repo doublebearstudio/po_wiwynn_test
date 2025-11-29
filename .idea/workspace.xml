@@ -5,7 +5,26 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3d2dd927-9d25-4409-aad3-7952ec9e38e0" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/extension.py" beforeDir="false" afterPath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/extension.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/GRIPPER_PARAMETER_GUIDE.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/PICK_PLACE_BREAKDOWN.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/PICK_PLACE_CONTROLLER_BREAKDOWN.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/PICK_UP_EXAMPLE_BREAKDOWN.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/_archived/README_CUSTOM_OBJECTS.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/_archived/custom_pick_place.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/_archived/custom_pick_up_example.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/_archived/robot_pickup_extension.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/_archived/robot_pickup_extension_complete.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/control_existing_gripper.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/custom_pick_place.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/follow_target.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/follow_target_example.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/ik_solver.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/pick_place.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/pick_up_example.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/pick_up_example.usda" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/pick_up_script_editor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/setup_gripper.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -52,15 +71,5 @@
       <updated>1764048779081</updated>
     </task>
     <servers />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/pochien.robotArm_sim/pochien/robotArm_sim/denso/custom_pick_place.py</url>
-          <option name="timeStamp" value="2" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>
