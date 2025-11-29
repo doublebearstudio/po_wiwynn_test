@@ -89,7 +89,7 @@ class MyExtension(omni.ext.IExt):
 
     def _build_ui(self):
         """Build the UI window with Setup Scene button."""
-        self._window = ui.Window("Robot Pick & Place Setup", width=400, height=350)
+        self._window = ui.Window("Robot Arm Simulator", width=400, height=450)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
@@ -103,14 +103,52 @@ class MyExtension(omni.ext.IExt):
 
                 ui.Separator()
 
-                # Status Section
-                with ui.VStack(spacing=10):
-                    self._status_label = ui.Label(
-                        "Ready - Click 'Setup Scene' to begin",
-                        word_wrap=True,
-                        style={"font_size": 13, "color": 0xFF00DD00},
-                        height=60
+                ui.Spacer(height=5)
+
+                # New Scene and Setup Scene buttons (horizontal)
+                with ui.HStack(spacing=10):
+                    ui.Button(
+                        "New Scene",
+                        clicked_fn=self._on_empty_scene_clicked,
+                        height=60,
+                        style={
+                            "Button": {
+                                "background_color": 0xFF666666,
+                                "border_radius": 5,
+                                "font_size": 16
+                            }
+                        }
                     )
+
+                    self._setup_button = ui.Button(
+                        "Setup Scene",
+                        clicked_fn=self._on_setup_clicked,
+                        height=60,
+                        style={
+                            "Button": {
+                                "background_color": 0xFF228822,
+                                "border_radius": 5,
+                                "font_size": 18
+                            }
+                        }
+                    )
+
+                ui.Spacer(height=5)
+
+                # Start/Stop Button
+                self._start_stop_button = ui.Button(
+                    "Start Simulation",
+                    clicked_fn=self._on_start_stop_clicked,
+                    height=50,
+                    enabled=False,
+                    style={
+                        "Button": {
+                            "background_color": 0xFF2288FF,
+                            "border_radius": 5,
+                            "font_size": 16
+                        }
+                    }
+                )
 
                 ui.Spacer(height=10)
 
@@ -135,55 +173,41 @@ class MyExtension(omni.ext.IExt):
                             style={"font_size": 10, "color": 0xFFAAAAAA}
                         )
 
-                ui.Spacer(height=10)
+                # Robot Parameters
+                with ui.CollapsableFrame("Robot Parameters", height=0, collapsed=True):
+                    with ui.VStack(spacing=3):
+                        ui.Label("Robot Prim Path:", style={"font_size": 11})
+                        ui.Label(
+                            "  /World/cobotta_pro_900",
+                            style={"font_size": 10, "color": 0xFFAAAAAA}
+                        )
 
-                # Setup Button
-                self._setup_button = ui.Button(
-                    "Setup Scene",
-                    clicked_fn=self._on_setup_clicked,
-                    height=60,
-                    style={
-                        "Button": {
-                            "background_color": 0xFF228822,
-                            "border_radius": 5,
-                            "font_size": 18
-                        }
-                    }
-                )
+                        ui.Spacer(height=5)
 
-                ui.Spacer(height=10)
+                        ui.Label("End Effector:", style={"font_size": 11})
+                        ui.Label(
+                            "  onrobot_rg6_base_link",
+                            style={"font_size": 10, "color": 0xFFAAAAAA}
+                        )
 
-                # Start/Stop Button
-                self._start_stop_button = ui.Button(
-                    "Start Simulation",
-                    clicked_fn=self._on_start_stop_clicked,
-                    height=50,
-                    enabled=False,
-                    style={
-                        "Button": {
-                            "background_color": 0xFF2288FF,
-                            "border_radius": 5,
-                            "font_size": 16
-                        }
-                    }
-                )
+                        ui.Spacer(height=5)
+
+                        ui.Label("Gripper Type:", style={"font_size": 11})
+                        ui.Label(
+                            "  Parallel Gripper (OnRobot RG6)",
+                            style={"font_size": 10, "color": 0xFFAAAAAA}
+                        )
 
                 ui.Spacer(height=10)
 
-                # Instructions
-                with ui.VStack(spacing=3):
-                    ui.Label("Instructions:", style={"font_size": 12, "color": 0xFFAAAAFF})
-                    ui.Label(
-                        "1. Click 'Setup Scene' to configure the scene",
-                        style={"font_size": 10, "color": 0xFFAAAAAA}
-                    )
-                    ui.Label(
-                        "2. Click 'Start Simulation' or press PLAY in Isaac Sim",
-                        style={"font_size": 10, "color": 0xFFAAAAAA}
-                    )
-                    ui.Label(
-                        "3. Click 'Stop Simulation' or press STOP to repeat",
-                        style={"font_size": 10, "color": 0xFFAAAAAA}
+                # Status Section (at the bottom)
+                ui.Label("Status:", style={"font_size": 12, "color": 0xFFAAAAFF})
+                with ui.VStack(spacing=5):
+                    self._status_label = ui.Label(
+                        "Ready - Click 'Setup Scene' to begin",
+                        word_wrap=True,
+                        style={"font_size": 13, "color": 0xFF00DD00},
+                        height=60
                     )
 
     def on_shutdown(self):
@@ -204,6 +228,64 @@ class MyExtension(omni.ext.IExt):
         if self._window:
             self._window.destroy()
             self._window = None
+
+    def _on_empty_scene_clicked(self):
+        """Handle New Scene button - Create a new empty stage."""
+        print("[RobotPickup] New Scene button clicked")
+
+        try:
+            # Stop simulation if running
+            if self._is_playing:
+                self._timeline.stop()
+
+            # Clear subscriptions
+            if self._timeline_subscription:
+                self._timeline_subscription.unsubscribe()
+                self._timeline_subscription = None
+
+            if self._physics_subscription:
+                self._physics_subscription.unsubscribe()
+                self._physics_subscription = None
+
+            # Reset state
+            self._setup = None
+            self._robot = None
+            self._controller = None
+            self._articulation_controller = None
+            self._initialized = False
+            self._scene_setup_complete = False
+            self._is_playing = False
+
+            # Create new empty stage
+            omni.usd.get_context().new_stage()
+
+            # Re-enable setup button and restore green color
+            self._setup_button.enabled = True
+            self._setup_button.style = {
+                "Button": {
+                    "background_color": 0xFF228822,
+                    "border_radius": 5,
+                    "font_size": 18
+                }
+            }
+            self._start_stop_button.enabled = False
+            self._start_stop_button.text = "Start Simulation"
+            self._start_stop_button.style = {
+                "Button": {
+                    "background_color": 0xFF2288FF,
+                    "border_radius": 5,
+                    "font_size": 16
+                }
+            }
+
+            self._update_status("New Scene created. Click 'Setup Scene' to begin.", error=False)
+            print("[RobotPickup] New Scene created successfully")
+
+        except Exception as e:
+            self._update_status(f"Error creating New Scene: {str(e)}", error=True)
+            print(f"[RobotPickup] New Scene error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_setup_clicked(self):
         """Handle Setup Scene button - Set up the entire pick-and-place scene."""
@@ -293,6 +375,14 @@ class MyExtension(omni.ext.IExt):
 
             self._scene_setup_complete = True
             self._setup_button.enabled = False
+            # Grey out the Setup Scene button
+            self._setup_button.style = {
+                "Button": {
+                    "background_color": 0xFF555555,
+                    "border_radius": 5,
+                    "font_size": 18
+                }
+            }
             self._start_stop_button.enabled = True
 
             print("\n" + "="*70)
