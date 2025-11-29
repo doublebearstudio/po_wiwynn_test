@@ -89,7 +89,7 @@ class MyExtension(omni.ext.IExt):
 
     def _build_ui(self):
         """Build the UI window with Setup Scene button."""
-        self._window = ui.Window("Robot Pick & Place Setup", width=400, height=300)
+        self._window = ui.Window("Robot Pick & Place Setup", width=400, height=350)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
@@ -153,6 +153,23 @@ class MyExtension(omni.ext.IExt):
 
                 ui.Spacer(height=10)
 
+                # Start/Stop Button
+                self._start_stop_button = ui.Button(
+                    "Start Simulation",
+                    clicked_fn=self._on_start_stop_clicked,
+                    height=50,
+                    enabled=False,
+                    style={
+                        "Button": {
+                            "background_color": 0xFF2288FF,
+                            "border_radius": 5,
+                            "font_size": 16
+                        }
+                    }
+                )
+
+                ui.Spacer(height=10)
+
                 # Instructions
                 with ui.VStack(spacing=3):
                     ui.Label("Instructions:", style={"font_size": 12, "color": 0xFFAAAAFF})
@@ -161,11 +178,11 @@ class MyExtension(omni.ext.IExt):
                         style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
                     ui.Label(
-                        "2. Press PLAY button in Isaac Sim to start",
+                        "2. Click 'Start Simulation' or press PLAY in Isaac Sim",
                         style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
                     ui.Label(
-                        "3. Press STOP to stop, then PLAY again to repeat",
+                        "3. Click 'Stop Simulation' or press STOP to repeat",
                         style={"font_size": 10, "color": 0xFFAAAAAA}
                     )
 
@@ -264,15 +281,16 @@ class MyExtension(omni.ext.IExt):
 
             self._scene_setup_complete = True
             self._setup_button.enabled = False
+            self._start_stop_button.enabled = True
 
             print("\n" + "="*70)
             print("READY")
             print("="*70)
-            print("→ Press ▶ PLAY button in Isaac Sim to start")
+            print("→ Click 'Start Simulation' button or press ▶ PLAY in Isaac Sim")
             print("="*70)
 
             self._update_status(
-                "Setup complete! Press PLAY button in Isaac Sim to start simulation.",
+                "Setup complete! Click 'Start Simulation' or press PLAY in Isaac Sim.",
                 error=False
             )
 
@@ -282,6 +300,17 @@ class MyExtension(omni.ext.IExt):
             import traceback
             traceback.print_exc()
 
+    def _on_start_stop_clicked(self):
+        """Handle Start/Stop button click."""
+        if self._is_playing:
+            # Stop simulation
+            print("[RobotPickup] Stop Simulation button clicked")
+            self._timeline.stop()
+        else:
+            # Start simulation
+            print("[RobotPickup] Start Simulation button clicked")
+            self._timeline.play()
+
     def _on_timeline_event(self, event):
         """Handle timeline events (play/stop/pause)."""
         if event.type == int(omni.timeline.TimelineEventType.PLAY):
@@ -289,10 +318,30 @@ class MyExtension(omni.ext.IExt):
             self._is_playing = True
             self._update_status("Simulation started. Initializing...", error=False)
 
+            # Update button
+            self._start_stop_button.text = "Stop Simulation"
+            self._start_stop_button.style = {
+                "Button": {
+                    "background_color": 0xFFFF4444,
+                    "border_radius": 5,
+                    "font_size": 16
+                }
+            }
+
         elif event.type == int(omni.timeline.TimelineEventType.STOP):
             print("[RobotPickup] Timeline STOP event detected")
             self._is_playing = False
             self._on_simulation_stop()
+
+            # Update button
+            self._start_stop_button.text = "Start Simulation"
+            self._start_stop_button.style = {
+                "Button": {
+                    "background_color": 0xFF2288FF,
+                    "border_radius": 5,
+                    "font_size": 16
+                }
+            }
 
     def _on_simulation_stop(self):
         """Handle simulation stop - reset state for next run."""
@@ -300,6 +349,10 @@ class MyExtension(omni.ext.IExt):
 
         # Reset initialization flag
         self._initialized = False
+
+        # Reset task done flag
+        if hasattr(self, '_task_done_logged'):
+            delattr(self, '_task_done_logged')
 
         # Reset controller if it exists
         if self._controller:
@@ -310,7 +363,7 @@ class MyExtension(omni.ext.IExt):
                 print(f"[RobotPickup] Controller reset error: {e}")
 
         self._update_status(
-            "Simulation stopped. Press PLAY to run again.",
+            "Simulation stopped. Click 'Start Simulation' to run again.",
             error=False
         )
 

@@ -164,10 +164,10 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
             # Tune these if movements are too fast/slow or jerky
             events_dt = [
                 0.005,  # 0: Move to pre-grasp position
-                0.002,  # 1: Descend to grasp height
+                0.001,  # 1: Descend to grasp height
                 1.0,    # 2: Wait/stabilize before grasping (important!)
                 0.05,   # 3: Close gripper
-                0.0008, # 4: Wait after grasp
+                0.0002, # 4: Wait after grasp
                 0.001,  # 5: Lift object
                 0.001, # 6: Move to target position
                 0.01,    # 7: Lower to placement height
