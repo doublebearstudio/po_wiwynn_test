@@ -81,6 +81,22 @@ class MyExtension(omni.ext.IExt):
         self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
         self._table_path = "D:/poc/po_wiwynn_test/prp_table01.usda"
 
+        # Default events_dt values
+        self._default_events_dt = [
+            0.005,  # 0: Move to pre-grasp position
+            0.05,   # 1: Descend to grasp height
+            1.0,    # 2: Wait/stabilize before grasping (important!)
+            0.05,   # 3: Close gripper
+            0.005,  # 4: Wait after grasp
+            1.0,    # 5: Lift object
+            0.0005, # 6: Move to target position
+            0.01,   # 7: Lower to placement height
+            0.004, # 8: Open gripper
+            0.008   # 9: Retreat from placed object
+        ]
+        self._current_events_dt = self._default_events_dt.copy()
+        self._events_dt_fields = []  # Store UI float fields
+
         # Get timeline interface
         self._timeline = get_timeline_interface()
 
@@ -89,7 +105,7 @@ class MyExtension(omni.ext.IExt):
 
     def _build_ui(self):
         """Build the UI window with Setup Scene button."""
-        self._window = ui.Window("Robot Arm Simulator", width=400, height=450)
+        self._window = ui.Window("Robot Arm Simulator", width=400, height=550)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
@@ -197,6 +213,84 @@ class MyExtension(omni.ext.IExt):
                             "  Parallel Gripper (OnRobot RG6)",
                             style={"font_size": 10, "color": 0xFFAAAAAA}
                         )
+
+                        ui.Spacer(height=10)
+                        ui.Separator()
+                        ui.Spacer(height=10)
+
+                        # Robot Arm Event Timing
+                        tooltip_text = """Event Timing Breakdown (events_dt):
+    The events_dt list controls how long the controller spends in each state
+    before transitioning to the next. Each value is in seconds.
+
+    Index | State                    | Default (s) | Description
+    ------|--------------------------|-------------|-----------------------------
+    0     | Move to pre-grasp        | 0.005       | Approach above object
+    1     | Descend to grasp height  | 0.002       | Lower to picking position
+    2     | Wait before grasp        | 1.000       | Stabilization pause
+    3     | Close gripper            | 0.050       | Grasp object
+    4     | Wait after grasp         | 0.0008      | Ensure firm grip
+    5     | Lift object              | 0.005       | Raise object up
+    6     | Move to target           | 0.0008      | Navigate to placement
+    7     | Lower to place height    | 0.100       | Descend to place
+    8     | Open gripper             | 0.0008      | Release object
+    9     | Retreat                  | 0.008       | Move away from object"""
+
+                        ui.Label(
+                            "Robot Arm Event Timing:",
+                            style={"font_size": 11},
+                            tooltip=tooltip_text
+                        )
+
+                        ui.Spacer(height=5)
+
+                        # Create float fields for events_dt (2 rows, 5 pairs each)
+                        # Row 1: indices 0-4
+                        with ui.HStack(spacing=5, height=0):
+                            for i in range(5):
+                                with ui.VStack(spacing=2, width=ui.Percent(20)):
+                                    ui.Label(f"{i}:", style={"font_size": 9})
+                                    field = ui.FloatField(height=20)
+                                    field.model.set_value(self._current_events_dt[i])
+                                    self._events_dt_fields.append(field)
+
+                        ui.Spacer(height=5)
+
+                        # Row 2: indices 5-9
+                        with ui.HStack(spacing=5, height=0):
+                            for i in range(5, 10):
+                                with ui.VStack(spacing=2, width=ui.Percent(20)):
+                                    ui.Label(f"{i}:", style={"font_size": 9})
+                                    field = ui.FloatField(height=20)
+                                    field.model.set_value(self._current_events_dt[i])
+                                    self._events_dt_fields.append(field)
+
+                        ui.Spacer(height=8)
+
+                        # Reset and Update buttons
+                        with ui.HStack(spacing=5):
+                            ui.Button(
+                                "Reset",
+                                clicked_fn=self._on_reset_events_dt,
+                                height=25,
+                                style={
+                                    "Button": {
+                                        "background_color": 0xFF666666,
+                                        "font_size": 12
+                                    }
+                                }
+                            )
+                            ui.Button(
+                                "Update",
+                                clicked_fn=self._on_update_events_dt,
+                                height=25,
+                                style={
+                                    "Button": {
+                                        "background_color": 0xFF2288FF,
+                                        "font_size": 12
+                                    }
+                                }
+                            )
 
                 ui.Spacer(height=10)
 
@@ -344,18 +438,7 @@ class MyExtension(omni.ext.IExt):
                 name="pick_place_controller",
                 robot_articulation=self._robot,
                 gripper=self._robot.gripper,
-                events_dt=[
-                        0.005,  # 0: Move to pre-grasp position
-                        0.05,  # 1: Descend to grasp height
-                        1.0,    # 2: Wait/stabilize before grasping (important!)
-                        0.05,   # 3: Close gripper
-                        0.001, # 4: Wait after grasp
-                        2.0,  # 5: Lift object
-                        0.0005, # 6: Move to target position
-                        0.01,    # 7: Lower to placement height
-                        0.0008, # 8: Open gripper
-                        0.008   # 9: Retreat from placed object
-                        ]
+                events_dt=self._current_events_dt.copy()
             )
 
             self._articulation_controller = self._robot.get_articulation_controller()
@@ -412,6 +495,42 @@ class MyExtension(omni.ext.IExt):
             # Start simulation
             print("[RobotPickup] Start Simulation button clicked")
             self._timeline.play()
+
+    def _on_reset_events_dt(self):
+        """Handle Reset button - Reset all events_dt values to default."""
+        print("[RobotPickup] Reset events_dt to defaults")
+
+        # Reset current values to defaults
+        self._current_events_dt = self._default_events_dt.copy()
+
+        # Update UI fields
+        for i, field in enumerate(self._events_dt_fields):
+            field.model.set_value(self._current_events_dt[i])
+
+        self._update_status("Event timing reset to defaults.", error=False)
+        print(f"[RobotPickup] Events_dt reset to: {self._current_events_dt}")
+
+    def _on_update_events_dt(self):
+        """Handle Update button - Update controller with new events_dt values."""
+        print("[RobotPickup] Update events_dt from UI")
+
+        # Read values from UI fields
+        for i, field in enumerate(self._events_dt_fields):
+            self._current_events_dt[i] = field.model.get_value_as_float()
+
+        # Update controller if it exists
+        if self._controller:
+            try:
+                # Update the controller's events_dt
+                self._controller._events_dt = self._current_events_dt.copy()
+                self._update_status("Event timing updated! Will apply on next simulation start.", error=False)
+                print(f"[RobotPickup] Controller events_dt updated to: {self._current_events_dt}")
+            except Exception as e:
+                self._update_status(f"Error updating controller: {str(e)}", error=True)
+                print(f"[RobotPickup] Error updating controller events_dt: {e}")
+        else:
+            self._update_status("Controller not initialized yet. Values will apply when scene is set up.", error=False)
+            print(f"[RobotPickup] Events_dt values saved: {self._current_events_dt}")
 
     def _on_timeline_event(self, event):
         """Handle timeline events (play/stop/pause)."""
