@@ -261,7 +261,19 @@ class MyExtension(omni.ext.IExt):
             self._controller = PickPlaceController(
                 name="pick_place_controller",
                 robot_articulation=self._robot,
-                gripper=self._robot.gripper
+                gripper=self._robot.gripper,
+                events_dt=[
+                        0.005,  # 0: Move to pre-grasp position
+                        0.05,  # 1: Descend to grasp height
+                        1.0,    # 2: Wait/stabilize before grasping (important!)
+                        0.05,   # 3: Close gripper
+                        0.001, # 4: Wait after grasp
+                        2.0,  # 5: Lift object
+                        0.0005, # 6: Move to target position
+                        0.01,    # 7: Lower to placement height
+                        0.0008, # 8: Open gripper
+                        0.008   # 9: Retreat from placed object
+                        ]
             )
 
             self._articulation_controller = self._robot.get_articulation_controller()
