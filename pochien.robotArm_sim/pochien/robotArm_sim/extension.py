@@ -80,7 +80,7 @@ class MyExtension(omni.ext.IExt):
         self._initial_position = np.array([-0.5, 0.4, 0.125])
         self._target_position = np.array([-0.6, -0.5, 0.135])
         self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
-        self._table_path = "D:/poc/po_wiwynn_test/prp_table01.usda"
+        self._table_path = "D:/poc/po_wiwynn_test/prp_table02.usda"
 
         # Default events_dt values
         self._default_events_dt = [
