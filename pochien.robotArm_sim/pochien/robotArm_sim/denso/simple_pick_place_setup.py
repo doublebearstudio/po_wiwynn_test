@@ -11,7 +11,8 @@ Usage:
     setup = PickPlaceSceneSetup(
         custom_usd_path="path/to/object.usd",
         object_initial_position=np.array([-0.5, 0.4, 0.125]),
-        target_position=np.array([-0.6, -0.5, 0.125])
+        target_position=np.array([-0.6, -0.5, 0.125]),
+        robot_position=np.array([0.0, 0.0, 0.0])
     )
 
     # Setup the scene
@@ -40,6 +41,7 @@ class PickPlaceSceneSetup:
         custom_usd_path: str,
         object_initial_position: Optional[np.ndarray] = None,
         target_position: Optional[np.ndarray] = None,
+        robot_position: Optional[np.ndarray] = None,
         robot_prim_path: str = "/World/cobotta",
         object_prim_path: str = "/World/pickup_object",
     ):
@@ -50,12 +52,14 @@ class PickPlaceSceneSetup:
             custom_usd_path: Path to custom USD file for the object to pick up
             object_initial_position: Initial position [x, y, z] in meters
             target_position: Target position [x, y, z] in meters
+            robot_position: Robot arm position [x, y, z] in meters
             robot_prim_path: USD path for the robot (default: /World/cobotta)
             object_prim_path: USD path for the object (default: /World/pickup_object)
         """
         self.custom_usd_path = custom_usd_path
         self.object_initial_position = object_initial_position if object_initial_position is not None else np.array([0.3, 0.3, 0.05])
         self.target_position = target_position if target_position is not None else np.array([-0.3, 0.3, 0.05])
+        self.robot_position = robot_position if robot_position is not None else np.array([0.0, 0.0, 0.0])
 
         self.robot_prim_path = robot_prim_path
         self.object_prim_path = object_prim_path
@@ -74,6 +78,16 @@ class PickPlaceSceneSetup:
         # Load robot USD
         robot_asset = "D:/poc/po_wiwynn_test/pochien.robotArm_sim/data/robot_data/denso/cobotta_pro_900/cobotta_pro_900.usd"
         add_reference_to_stage(usd_path=robot_asset, prim_path=self.robot_prim_path)
+
+        # Set robot position
+        prim = self._stage.GetPrimAtPath(self.robot_prim_path)
+        xformable = UsdGeom.Xformable(prim)
+        xform_api = UsdGeom.XformCommonAPI(xformable)
+        xform_api.SetTranslate(Gf.Vec3d(
+            float(self.robot_position[0]),
+            float(self.robot_position[1]),
+            float(self.robot_position[2])
+        ))
 
         # Configure gripper
         gripper = ParallelGripper(

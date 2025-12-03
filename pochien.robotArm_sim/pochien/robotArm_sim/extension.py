@@ -77,6 +77,7 @@ class MyExtension(omni.ext.IExt):
         self._is_playing = False
 
         # Scene configuration
+        self._robot_position = np.array([0.0, 0.0, 0.0])
         self._initial_position = np.array([-0.5, 0.4, 0.125])
         self._target_position = np.array([-0.6, -0.5, 0.135])
         self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
@@ -85,7 +86,7 @@ class MyExtension(omni.ext.IExt):
         # Default events_dt values
         self._default_events_dt = [
             0.005,  # 0: Move to pre-grasp position
-            0.05,   # 1: Descend to grasp height
+            0.005,   # 1: Descend to grasp height
             1.0,    # 2: Wait/stabilize before grasping (important!)
             0.05,   # 3: Close gripper
             0.005,  # 4: Wait after grasp
@@ -100,11 +101,13 @@ class MyExtension(omni.ext.IExt):
 
         # Store default scene parameter values
         self._default_custom_usd_path = self._custom_usd_path
+        self._default_robot_position = self._robot_position.copy()
         self._default_initial_position = self._initial_position.copy()
         self._default_target_position = self._target_position.copy()
 
         # UI field references for scene parameters
         self._target_object_field = None
+        self._robot_pos_fields = []  # X, Y, Z fields
         self._pickup_pos_fields = []  # X, Y, Z fields
         self._target_pos_fields = []  # X, Y, Z fields
 
@@ -187,6 +190,26 @@ class MyExtension(omni.ext.IExt):
                             ui.Label("Target Object:", style={"font_size": 11}, width=100)
                             self._target_object_field = ui.StringField(height=20)
                             self._target_object_field.model.set_value(self._custom_usd_path)
+
+                        ui.Spacer(height=3)
+
+                        # Robot Position
+                        ui.Label("Robot Position (m):", style={"font_size": 11})
+                        with ui.HStack(spacing=5):
+                            ui.Label("X:", style={"font_size": 10}, width=15)
+                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_x.model.set_value(self._robot_position[0])
+                            self._robot_pos_fields.append(field_x)
+
+                            ui.Label("Y:", style={"font_size": 10}, width=15)
+                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_y.model.set_value(self._robot_position[1])
+                            self._robot_pos_fields.append(field_y)
+
+                            ui.Label("Z:", style={"font_size": 10}, width=15)
+                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_z.model.set_value(self._robot_position[2])
+                            self._robot_pos_fields.append(field_z)
 
                         ui.Spacer(height=3)
 
@@ -472,7 +495,8 @@ class MyExtension(omni.ext.IExt):
             self._setup = PickPlaceSceneSetup(
                 custom_usd_path=self._custom_usd_path,
                 object_initial_position=self._initial_position,
-                target_position=self._target_position
+                target_position=self._target_position,
+                robot_position=self._robot_position
             )
 
             # Add table
@@ -604,12 +628,16 @@ class MyExtension(omni.ext.IExt):
 
         # Reset to defaults
         self._custom_usd_path = self._default_custom_usd_path
+        self._robot_position = self._default_robot_position.copy()
         self._initial_position = self._default_initial_position.copy()
         self._target_position = self._default_target_position.copy()
 
         # Update UI fields
         if self._target_object_field:
             self._target_object_field.model.set_value(self._custom_usd_path)
+
+        for i, field in enumerate(self._robot_pos_fields):
+            field.model.set_value(self._robot_position[i])
 
         for i, field in enumerate(self._pickup_pos_fields):
             field.model.set_value(self._initial_position[i])
@@ -619,6 +647,7 @@ class MyExtension(omni.ext.IExt):
 
         self._update_status("Scene parameters reset to defaults.", error=False)
         print(f"[RobotPickup] Reset - USD: {self._custom_usd_path}")
+        print(f"[RobotPickup] Reset - Robot: {self._robot_position}")
         print(f"[RobotPickup] Reset - Pickup: {self._initial_position}")
         print(f"[RobotPickup] Reset - Target: {self._target_position}")
 
@@ -629,6 +658,11 @@ class MyExtension(omni.ext.IExt):
         try:
             # Read current values from UI
             new_usd_path = self._target_object_field.model.get_value_as_string()
+            new_robot_pos = np.array([
+                self._robot_pos_fields[0].model.get_value_as_float(),
+                self._robot_pos_fields[1].model.get_value_as_float(),
+                self._robot_pos_fields[2].model.get_value_as_float()
+            ])
             new_pickup_pos = np.array([
                 self._pickup_pos_fields[0].model.get_value_as_float(),
                 self._pickup_pos_fields[1].model.get_value_as_float(),
@@ -642,32 +676,44 @@ class MyExtension(omni.ext.IExt):
 
             # Detect changes
             usd_changed = new_usd_path != self._custom_usd_path
+            robot_changed = not np.array_equal(new_robot_pos, self._robot_position)
             pickup_changed = not np.array_equal(new_pickup_pos, self._initial_position)
             target_changed = not np.array_equal(new_target_pos, self._target_position)
 
-            if not (usd_changed or pickup_changed or target_changed):
+            if not (usd_changed or robot_changed or pickup_changed or target_changed):
                 self._update_status("No changes detected.", error=False)
                 print("[RobotPickup] No changes to scene parameters")
                 return
 
             # Update values
             self._custom_usd_path = new_usd_path
+            self._robot_position = new_robot_pos
             self._initial_position = new_pickup_pos
             self._target_position = new_target_pos
 
             print(f"[RobotPickup] Updated - USD: {self._custom_usd_path}")
+            print(f"[RobotPickup] Updated - Robot: {self._robot_position}")
             print(f"[RobotPickup] Updated - Pickup: {self._initial_position}")
             print(f"[RobotPickup] Updated - Target: {self._target_position}")
 
             # Update setup if it exists
             if self._setup:
-                if pickup_changed or target_changed:
+                if robot_changed or pickup_changed or target_changed:
                     # Update positions in the setup object
+                    self._setup.robot_position = self._robot_position.copy()
                     self._setup._object_initial_position = self._initial_position.copy()
                     self._setup._target_position = self._target_position.copy()
 
                     # Update the prim positions in USD if objects exist
                     stage = omni.usd.get_context().get_stage()
+
+                    if robot_changed and stage.GetPrimAtPath("/World/cobotta"):
+                        prim = stage.GetPrimAtPath("/World/cobotta")
+                        xform = UsdGeom.Xformable(prim)
+                        xform.ClearXformOpOrder()
+                        xform_op = xform.AddTranslateOp()
+                        xform_op.Set(tuple(self._robot_position))
+                        print(f"[RobotPickup] Updated robot position in USD")
 
                     if pickup_changed and stage.GetPrimAtPath("/World/pickup_object"):
                         prim = stage.GetPrimAtPath("/World/pickup_object")
@@ -781,10 +827,19 @@ class MyExtension(omni.ext.IExt):
             # Get observations
             observations = self._setup.get_observations(self._robot)
 
-            # Compute actions
+            # Transform world coordinates to robot-local coordinates
+            # The controller expects positions relative to the robot's base frame
+            object_world_pos = observations["pickup_object"]["position"]
+            target_world_pos = observations["pickup_object"]["target_position"]
+
+            # Subtract robot base position to get robot-local coordinates
+            object_local_pos = object_world_pos - self._robot_position
+            target_local_pos = target_world_pos - self._robot_position
+
+            # Compute actions using robot-local coordinates
             actions = self._controller.forward(
-                picking_position=observations["pickup_object"]["position"],
-                placing_position=observations["pickup_object"]["target_position"],
+                picking_position=object_local_pos,
+                placing_position=target_local_pos,
                 current_joint_positions=observations["cobotta_robot"]["joint_positions"],
                 end_effector_offset=np.array([0, 0, 0.25]),
             )
