@@ -35,6 +35,7 @@ import numpy as np
 import sys
 import os
 import carb
+from pxr import UsdGeom
 
 # Add denso directory to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -97,6 +98,16 @@ class MyExtension(omni.ext.IExt):
         self._current_events_dt = self._default_events_dt.copy()
         self._events_dt_fields = []  # Store UI float fields
 
+        # Store default scene parameter values
+        self._default_custom_usd_path = self._custom_usd_path
+        self._default_initial_position = self._initial_position.copy()
+        self._default_target_position = self._target_position.copy()
+
+        # UI field references for scene parameters
+        self._target_object_field = None
+        self._pickup_pos_fields = []  # X, Y, Z fields
+        self._target_pos_fields = []  # X, Y, Z fields
+
         # Get timeline interface
         self._timeline = get_timeline_interface()
 
@@ -105,7 +116,7 @@ class MyExtension(omni.ext.IExt):
 
     def _build_ui(self):
         """Build the UI window with Setup Scene button."""
-        self._window = ui.Window("Robot Arm Simulator", width=400, height=550)
+        self._window = ui.Window("Robot Arm Simulator", width=400, height=600)
 
         with self._window.frame:
             with ui.VStack(spacing=15, height=0):
@@ -170,24 +181,79 @@ class MyExtension(omni.ext.IExt):
 
                 # Scene Parameters
                 with ui.CollapsableFrame("Scene Parameters", height=0, collapsed=True):
-                    with ui.VStack(spacing=3):
+                    with ui.VStack(spacing=5):
+                        # Target Object
+                        with ui.HStack(spacing=5):
+                            ui.Label("Target Object:", style={"font_size": 11}, width=100)
+                            self._target_object_field = ui.StringField(height=20)
+                            self._target_object_field.model.set_value(self._custom_usd_path)
+
+                        ui.Spacer(height=3)
+
+                        # Pickup Position
                         ui.Label("Pickup Position (m):", style={"font_size": 11})
-                        ui.Label(
-                            f"  X: {self._initial_position[0]:.3f}, "
-                            f"Y: {self._initial_position[1]:.3f}, "
-                            f"Z: {self._initial_position[2]:.3f}",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
+                        with ui.HStack(spacing=5):
+                            ui.Label("X:", style={"font_size": 10}, width=15)
+                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_x.model.set_value(self._initial_position[0])
+                            self._pickup_pos_fields.append(field_x)
 
-                        ui.Spacer(height=5)
+                            ui.Label("Y:", style={"font_size": 10}, width=15)
+                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_y.model.set_value(self._initial_position[1])
+                            self._pickup_pos_fields.append(field_y)
 
+                            ui.Label("Z:", style={"font_size": 10}, width=15)
+                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_z.model.set_value(self._initial_position[2])
+                            self._pickup_pos_fields.append(field_z)
+
+                        ui.Spacer(height=3)
+
+                        # Target Position
                         ui.Label("Target Position (m):", style={"font_size": 11})
-                        ui.Label(
-                            f"  X: {self._target_position[0]:.3f}, "
-                            f"Y: {self._target_position[1]:.3f}, "
-                            f"Z: {self._target_position[2]:.3f}",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
+                        with ui.HStack(spacing=5):
+                            ui.Label("X:", style={"font_size": 10}, width=15)
+                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_x.model.set_value(self._target_position[0])
+                            self._target_pos_fields.append(field_x)
+
+                            ui.Label("Y:", style={"font_size": 10}, width=15)
+                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_y.model.set_value(self._target_position[1])
+                            self._target_pos_fields.append(field_y)
+
+                            ui.Label("Z:", style={"font_size": 10}, width=15)
+                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                            field_z.model.set_value(self._target_position[2])
+                            self._target_pos_fields.append(field_z)
+
+                        ui.Spacer(height=8)
+
+                        # Reset and Update buttons
+                        with ui.HStack(spacing=5):
+                            ui.Button(
+                                "Reset",
+                                clicked_fn=self._on_reset_scene_params,
+                                height=25,
+                                style={
+                                    "Button": {
+                                        "background_color": 0xFF666666,
+                                        "font_size": 12
+                                    }
+                                }
+                            )
+                            ui.Button(
+                                "Update",
+                                clicked_fn=self._on_update_scene_params,
+                                height=25,
+                                style={
+                                    "Button": {
+                                        "background_color": 0xFF2288FF,
+                                        "font_size": 12
+                                    }
+                                }
+                            )
 
                 # Robot Parameters
                 with ui.CollapsableFrame("Robot Parameters", height=0, collapsed=True):
@@ -531,6 +597,106 @@ class MyExtension(omni.ext.IExt):
         else:
             self._update_status("Controller not initialized yet. Values will apply when scene is set up.", error=False)
             print(f"[RobotPickup] Events_dt values saved: {self._current_events_dt}")
+
+    def _on_reset_scene_params(self):
+        """Handle Reset button - Reset scene parameters to defaults."""
+        print("[RobotPickup] Reset scene parameters to defaults")
+
+        # Reset to defaults
+        self._custom_usd_path = self._default_custom_usd_path
+        self._initial_position = self._default_initial_position.copy()
+        self._target_position = self._default_target_position.copy()
+
+        # Update UI fields
+        if self._target_object_field:
+            self._target_object_field.model.set_value(self._custom_usd_path)
+
+        for i, field in enumerate(self._pickup_pos_fields):
+            field.model.set_value(self._initial_position[i])
+
+        for i, field in enumerate(self._target_pos_fields):
+            field.model.set_value(self._target_position[i])
+
+        self._update_status("Scene parameters reset to defaults.", error=False)
+        print(f"[RobotPickup] Reset - USD: {self._custom_usd_path}")
+        print(f"[RobotPickup] Reset - Pickup: {self._initial_position}")
+        print(f"[RobotPickup] Reset - Target: {self._target_position}")
+
+    def _on_update_scene_params(self):
+        """Handle Update button - Update scene parameters from UI fields."""
+        print("[RobotPickup] Update scene parameters from UI")
+
+        try:
+            # Read current values from UI
+            new_usd_path = self._target_object_field.model.get_value_as_string()
+            new_pickup_pos = np.array([
+                self._pickup_pos_fields[0].model.get_value_as_float(),
+                self._pickup_pos_fields[1].model.get_value_as_float(),
+                self._pickup_pos_fields[2].model.get_value_as_float()
+            ])
+            new_target_pos = np.array([
+                self._target_pos_fields[0].model.get_value_as_float(),
+                self._target_pos_fields[1].model.get_value_as_float(),
+                self._target_pos_fields[2].model.get_value_as_float()
+            ])
+
+            # Detect changes
+            usd_changed = new_usd_path != self._custom_usd_path
+            pickup_changed = not np.array_equal(new_pickup_pos, self._initial_position)
+            target_changed = not np.array_equal(new_target_pos, self._target_position)
+
+            if not (usd_changed or pickup_changed or target_changed):
+                self._update_status("No changes detected.", error=False)
+                print("[RobotPickup] No changes to scene parameters")
+                return
+
+            # Update values
+            self._custom_usd_path = new_usd_path
+            self._initial_position = new_pickup_pos
+            self._target_position = new_target_pos
+
+            print(f"[RobotPickup] Updated - USD: {self._custom_usd_path}")
+            print(f"[RobotPickup] Updated - Pickup: {self._initial_position}")
+            print(f"[RobotPickup] Updated - Target: {self._target_position}")
+
+            # Update setup if it exists
+            if self._setup:
+                if pickup_changed or target_changed:
+                    # Update positions in the setup object
+                    self._setup._object_initial_position = self._initial_position.copy()
+                    self._setup._target_position = self._target_position.copy()
+
+                    # Update the prim positions in USD if objects exist
+                    stage = omni.usd.get_context().get_stage()
+
+                    if pickup_changed and stage.GetPrimAtPath("/World/pickup_object"):
+                        prim = stage.GetPrimAtPath("/World/pickup_object")
+                        xform = UsdGeom.Xformable(prim)
+                        xform.ClearXformOpOrder()
+                        xform_op = xform.AddTranslateOp()
+                        xform_op.Set(tuple(self._initial_position))
+                        print(f"[RobotPickup] Updated pickup object position in USD")
+
+                    if target_changed and stage.GetPrimAtPath("/World/target_marker"):
+                        prim = stage.GetPrimAtPath("/World/target_marker")
+                        xform = UsdGeom.Xformable(prim)
+                        xform.ClearXformOpOrder()
+                        xform_op = xform.AddTranslateOp()
+                        xform_op.Set(tuple(self._target_position))
+                        print(f"[RobotPickup] Updated target marker position in USD")
+
+                if usd_changed:
+                    self._update_status("USD path changed. Please reset scene to apply.", error=False)
+                else:
+                    self._update_status("Scene parameters updated!", error=False)
+            else:
+                self._update_status("Scene parameters updated. Will apply when scene is set up.", error=False)
+
+        except Exception as e:
+            self._update_status(f"Error updating scene parameters: {str(e)}", error=True)
+            print(f"[RobotPickup] Error updating scene parameters: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_timeline_event(self, event):
         """Handle timeline events (play/stop/pause)."""
