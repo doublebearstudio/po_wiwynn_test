@@ -384,7 +384,7 @@ class MyExtension(omni.ext.IExt):
                         with ui.VStack(spacing=3):
                             ui.Label("Robot Prim Path:", style={"font_size": 11})
                             ui.Label(
-                                "  /World/cobotta_pro_900",
+                                f"  {task_data['robot_prim_path']}",
                                 style={"font_size": 10, "color": 0xFFAAAAAA}
                             )
 
