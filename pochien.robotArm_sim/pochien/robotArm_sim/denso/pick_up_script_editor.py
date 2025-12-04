@@ -1,8 +1,8 @@
 """
-Pick and Place - Script Editor Version (Simplified)
+Pick and Place - Standalone Script Editor Version (Simplified)
 
-This script uses the simple PickPlaceSceneSetup class instead of BaseTask.
-No World.add_task(), no complex initialization - just straightforward setup.
+This is a test file only used for setting up a single pick and place event directly from Script Editor.
+Not a module and nor should be used in any official scenario.
 
 Usage:
 1. Open Isaac Sim
