@@ -66,10 +66,17 @@ class MyExtension(omni.ext.IExt):
         print("[RobotPickup] Extension startup")
 
         # State variables
-        self._setup = None
-        self._robot = None
-        self._controller = None
-        self._articulation_controller = None
+        self._setup = None  # Legacy - keeping for compatibility
+        self._robot = None  # Legacy - keeping for compatibility
+        self._controller = None  # Legacy - keeping for compatibility
+        self._articulation_controller = None  # Legacy - keeping for compatibility
+
+        # Multi-task support
+        self._task_setups = []  # List of PickPlaceSceneSetup objects (one per task)
+        self._task_robots = []  # List of robot objects (one per task)
+        self._task_controllers = []  # List of controllers (one per task)
+        self._task_articulation_controllers = []  # List of articulation controllers (one per task)
+
         self._physics_subscription = None
         self._timeline_subscription = None
         self._initialized = False
@@ -244,11 +251,13 @@ class MyExtension(omni.ext.IExt):
         """Handle Add Task button - Create a new task frame with Scene Parameters and Robot Parameters."""
         self._task_count += 1
         task_name = f"Task{self._task_count}"
+        task_id = self._task_count
         print(f"[RobotPickup] Adding {task_name}")
 
         # Create storage for this task's UI fields
         task_data = {
             'name': task_name,
+            'id': task_id,
             'target_object_field': None,
             'robot_pos_fields': [],
             'pickup_pos_fields': [],
@@ -258,7 +267,16 @@ class MyExtension(omni.ext.IExt):
             'robot_position': self._default_robot_position.copy(),
             'initial_position': self._default_initial_position.copy(),
             'target_position': self._default_target_position.copy(),
-            'events_dt': self._default_events_dt.copy()
+            'events_dt': self._default_events_dt.copy(),
+            # USD prim paths for this task
+            'robot_prim_path': f"/World/cobotta_task{task_id}",
+            'object_prim_path': f"/World/pickup_object_task{task_id}",
+            'target_marker_path': f"/World/target_marker_task{task_id}",
+            # Runtime objects (set during setup)
+            'setup': None,
+            'robot': None,
+            'controller': None,
+            'articulation_controller': None
         }
 
         # Add task UI inside the tasks container
@@ -523,45 +541,39 @@ class MyExtension(omni.ext.IExt):
         print(f"[RobotPickup] {task['name']} - Updated Pickup: {new_pickup_pos}")
         print(f"[RobotPickup] {task['name']} - Updated Target: {new_target_pos}")
 
-        # If this is the first task and scene is already set up, update the actual USD scene
-        if len(self._tasks) > 0 and self._tasks[0] == task and self._setup:
-            # Update global variables
-            self._custom_usd_path = new_usd_path
-            self._robot_position = new_robot_pos
-            self._initial_position = new_pickup_pos
-            self._target_position = new_target_pos
-
+        # If scene is already set up and this task has been created, update the actual USD scene
+        if task['setup'] is not None:
             # Update setup object
-            self._setup.robot_position = new_robot_pos.copy()
-            self._setup._object_initial_position = new_pickup_pos.copy()
-            self._setup._target_position = new_target_pos.copy()
+            task['setup'].robot_position = new_robot_pos.copy()
+            task['setup']._object_initial_position = new_pickup_pos.copy()
+            task['setup']._target_position = new_target_pos.copy()
 
             # Update the prim positions in USD if objects exist
             stage = omni.usd.get_context().get_stage()
 
-            if robot_changed and stage.GetPrimAtPath("/World/cobotta"):
-                prim = stage.GetPrimAtPath("/World/cobotta")
+            if robot_changed and stage.GetPrimAtPath(task['robot_prim_path']):
+                prim = stage.GetPrimAtPath(task['robot_prim_path'])
                 xform = UsdGeom.Xformable(prim)
                 xform.ClearXformOpOrder()
                 xform_op = xform.AddTranslateOp()
                 xform_op.Set(tuple(new_robot_pos))
-                print(f"[RobotPickup] Updated robot position in USD scene")
+                print(f"[RobotPickup] {task['name']} - Updated robot position in USD scene")
 
-            if pickup_changed and stage.GetPrimAtPath("/World/pickup_object"):
-                prim = stage.GetPrimAtPath("/World/pickup_object")
+            if pickup_changed and stage.GetPrimAtPath(task['object_prim_path']):
+                prim = stage.GetPrimAtPath(task['object_prim_path'])
                 xform = UsdGeom.Xformable(prim)
                 xform.ClearXformOpOrder()
                 xform_op = xform.AddTranslateOp()
                 xform_op.Set(tuple(new_pickup_pos))
-                print(f"[RobotPickup] Updated pickup object position in USD scene")
+                print(f"[RobotPickup] {task['name']} - Updated pickup object position in USD scene")
 
-            if target_changed and stage.GetPrimAtPath("/World/target_marker"):
-                prim = stage.GetPrimAtPath("/World/target_marker")
+            if target_changed and stage.GetPrimAtPath(task['target_marker_path']):
+                prim = stage.GetPrimAtPath(task['target_marker_path'])
                 xform = UsdGeom.Xformable(prim)
                 xform.ClearXformOpOrder()
                 xform_op = xform.AddTranslateOp()
                 xform_op.Set(tuple(new_target_pos))
-                print(f"[RobotPickup] Updated target marker position in USD scene")
+                print(f"[RobotPickup] {task['name']} - Updated target marker position in USD scene")
 
             if usd_changed:
                 self._update_status(f"{task['name']} updated! USD path changed - reset scene to apply.", error=False)
@@ -584,17 +596,16 @@ class MyExtension(omni.ext.IExt):
 
         print(f"[RobotPickup] {task['name']} - Updated events_dt: {task['events_dt']}")
 
-        # If this is the first task and scene is already set up, update the controller
-        if len(self._tasks) > 0 and self._tasks[0] == task and self._controller:
-            self._current_events_dt = task['events_dt'].copy()
+        # If scene is already set up and this task has a controller, update it
+        if task['controller'] is not None:
             try:
                 # Update the controller's events_dt
-                self._controller._events_dt = self._current_events_dt.copy()
+                task['controller']._events_dt = task['events_dt'].copy()
                 self._update_status(f"{task['name']} event timing updated! Will apply on next simulation start.", error=False)
-                print(f"[RobotPickup] Controller events_dt updated to: {self._current_events_dt}")
+                print(f"[RobotPickup] {task['name']} controller events_dt updated")
             except Exception as e:
-                self._update_status(f"Error updating controller: {str(e)}", error=True)
-                print(f"[RobotPickup] Error updating controller events_dt: {e}")
+                self._update_status(f"Error updating {task['name']} controller: {str(e)}", error=True)
+                print(f"[RobotPickup] Error updating {task['name']} controller events_dt: {e}")
         else:
             self._update_status(f"{task['name']} event timing updated!", error=False)
 
@@ -624,6 +635,19 @@ class MyExtension(omni.ext.IExt):
             self._initialized = False
             self._scene_setup_complete = False
             self._is_playing = False
+
+            # Clear multi-task data
+            self._task_setups.clear()
+            self._task_robots.clear()
+            self._task_controllers.clear()
+            self._task_articulation_controllers.clear()
+
+            # Clear task runtime objects
+            for task in self._tasks:
+                task['setup'] = None
+                task['robot'] = None
+                task['controller'] = None
+                task['articulation_controller'] = None
 
             # Create new empty stage
             omni.usd.get_context().new_stage()
@@ -657,7 +681,7 @@ class MyExtension(omni.ext.IExt):
             traceback.print_exc()
 
     def _on_setup_clicked(self):
-        """Handle Setup Scene button - Set up the entire pick-and-place scene."""
+        """Handle Setup Scene button - Set up the entire pick-and-place scene for ALL tasks."""
         print("[RobotPickup] Setup Scene button clicked")
 
         # Check if tasks have been created
@@ -678,63 +702,81 @@ class MyExtension(omni.ext.IExt):
                 self._update_status("Error: Required modules not available!", error=True)
                 return
 
-            # Use first task's parameters for now (TODO: support multiple tasks)
-            first_task = self._tasks[0]
-            self._custom_usd_path = first_task['custom_usd_path']
-            self._robot_position = first_task['robot_position']
-            self._initial_position = first_task['initial_position']
-            self._target_position = first_task['target_position']
-            self._current_events_dt = first_task['events_dt']
-
             print("="*70)
-            print("PICK AND PLACE SETUP")
+            print(f"PICK AND PLACE SETUP - {len(self._tasks)} TASKS")
             print("="*70)
-            print(f"Using parameters from {first_task['name']}")
 
-            # Create setup helper
-            print("\n→ Setting up scene...")
-            self._setup = PickPlaceSceneSetup(
-                custom_usd_path=self._custom_usd_path,
-                object_initial_position=self._initial_position,
-                target_position=self._target_position,
-                robot_position=self._robot_position
-            )
-
-            # Add table
+            # Add table (shared by all tasks)
             self._update_status("Adding table...", error=False)
             add_reference_to_stage(usd_path=self._table_path, prim_path="/World/Table")
 
-            # Create robot
-            self._update_status("Creating robot...", error=False)
-            print("  → Creating robot...")
-            self._robot = self._setup.create_robot()
+            # Clear previous task data
+            self._task_setups.clear()
+            self._task_robots.clear()
+            self._task_controllers.clear()
+            self._task_articulation_controllers.clear()
 
-            # Create pickup object
-            self._update_status("Creating pickup object...", error=False)
-            print("  → Creating pickup object...")
-            self._setup.create_object(mass=0.01)  # 10 grams
+            # Loop through all tasks and create objects for each
+            for task_idx, task in enumerate(self._tasks):
+                print(f"\n→ Setting up {task['name']}...")
+                self._update_status(f"Setting up {task['name']}...", error=False)
 
-            # Create target marker
-            self._update_status("Creating target marker...", error=False)
-            print("  → Creating target marker...")
-            self._setup.create_target_marker()
+                # Create setup helper for this task
+                setup = PickPlaceSceneSetup(
+                    custom_usd_path=task['custom_usd_path'],
+                    object_initial_position=task['initial_position'],
+                    target_position=task['target_position'],
+                    robot_position=task['robot_position'],
+                    robot_prim_path=task['robot_prim_path'],
+                    object_prim_path=task['object_prim_path']
+                )
+                setup.target_marker_path = task['target_marker_path']
 
-            print("✓ Scene setup complete")
+                # Create robot for this task
+                print(f"  → Creating robot at {task['robot_prim_path']}...")
+                robot = setup.create_robot()
 
-            # Initialize controller
-            self._update_status("Initializing controller...", error=False)
-            print("\n→ Initializing controller...")
+                # Create pickup object for this task
+                print(f"  → Creating pickup object at {task['object_prim_path']}...")
+                setup.create_object(mass=0.01)  # 10 grams
 
-            self._controller = PickPlaceController(
-                name="pick_place_controller",
-                robot_articulation=self._robot,
-                gripper=self._robot.gripper,
-                events_dt=self._current_events_dt.copy()
-            )
+                # Create target marker for this task
+                print(f"  → Creating target marker at {task['target_marker_path']}...")
+                setup.create_target_marker()
 
-            self._articulation_controller = self._robot.get_articulation_controller()
+                # Initialize controller for this task
+                print(f"  → Initializing controller for {task['name']}...")
+                controller = PickPlaceController(
+                    name=f"pick_place_controller_{task['id']}",
+                    robot_articulation=robot,
+                    gripper=robot.gripper,
+                    events_dt=task['events_dt'].copy()
+                )
 
-            print("✓ Controller ready")
+                articulation_controller = robot.get_articulation_controller()
+
+                # Store task objects
+                task['setup'] = setup
+                task['robot'] = robot
+                task['controller'] = controller
+                task['articulation_controller'] = articulation_controller
+
+                # Add to lists
+                self._task_setups.append(setup)
+                self._task_robots.append(robot)
+                self._task_controllers.append(controller)
+                self._task_articulation_controllers.append(articulation_controller)
+
+                print(f"✓ {task['name']} setup complete")
+
+            # Set legacy variables to first task for compatibility
+            if len(self._tasks) > 0:
+                self._setup = self._tasks[0]['setup']
+                self._robot = self._tasks[0]['robot']
+                self._controller = self._tasks[0]['controller']
+                self._articulation_controller = self._tasks[0]['articulation_controller']
+
+            print("\n✓ All tasks setup complete")
 
             # Subscribe to physics updates
             self._update_status("Setting up physics subscription...", error=False)
@@ -762,11 +804,11 @@ class MyExtension(omni.ext.IExt):
             print("\n" + "="*70)
             print("READY")
             print("="*70)
-            print("→ Click 'Start Simulation' button or press ▶ PLAY in Isaac Sim")
+            print(f"→ {len(self._tasks)} tasks ready. Click 'Start Simulation' or press ▶ PLAY")
             print("="*70)
 
             self._update_status(
-                "Setup complete! Click 'Start Simulation' or press PLAY in Isaac Sim.",
+                f"Setup complete! {len(self._tasks)} tasks ready. Click 'Start Simulation'.",
                 error=False
             )
 
@@ -984,17 +1026,21 @@ class MyExtension(omni.ext.IExt):
         # Reset initialization flag
         self._initialized = False
 
-        # Reset task done flag
+        # Reset all task done flags
         if hasattr(self, '_task_done_logged'):
             delattr(self, '_task_done_logged')
+        if hasattr(self, '_all_tasks_done_logged'):
+            delattr(self, '_all_tasks_done_logged')
 
-        # Reset controller if it exists
-        if self._controller:
-            try:
-                self._controller.reset()
-                print("[RobotPickup] Controller reset")
-            except Exception as e:
-                print(f"[RobotPickup] Controller reset error: {e}")
+        # Reset all task controllers and flags
+        for task in self._tasks:
+            if task['controller']:
+                try:
+                    task['controller'].reset()
+                    task['done_logged'] = False
+                    print(f"[RobotPickup] {task['name']} controller reset")
+                except Exception as e:
+                    print(f"[RobotPickup] {task['name']} controller reset error: {e}")
 
         self._update_status(
             "Simulation stopped. Click 'Start Simulation' to run again.",
@@ -1002,7 +1048,7 @@ class MyExtension(omni.ext.IExt):
         )
 
     def _simulation_step(self, step_size):
-        """Called every physics step when simulation is playing."""
+        """Called every physics step when simulation is playing - handles ALL tasks."""
 
         # Only run if timeline is playing
         if not self._is_playing:
@@ -1011,53 +1057,73 @@ class MyExtension(omni.ext.IExt):
         # One-time initialization when timeline starts
         if not self._initialized:
             try:
-                self._robot.initialize()
-                self._controller.reset()
+                # Initialize all robots and controllers
+                for task_idx, task in enumerate(self._tasks):
+                    task['robot'].initialize()
+                    task['controller'].reset()
+                    # Initialize task-specific completion flags
+                    task['done_logged'] = False
+
                 self._initialized = True
-                print("\n✓ System initialized")
+                print("\n✓ All systems initialized")
                 print("="*70)
-                print("RUNNING PICK AND PLACE")
+                print(f"RUNNING {len(self._tasks)} PICK AND PLACE TASKS")
                 print("="*70)
-                self._update_status("Running: Pick and place in progress...", error=False)
+                self._update_status(f"Running: {len(self._tasks)} tasks in progress...", error=False)
             except Exception as e:
                 # Wait for physics context
                 return
 
-        # Main control loop
+        # Main control loop - handle all tasks
         try:
-            # Get observations
-            observations = self._setup.get_observations(self._robot)
+            all_done = True
 
-            # Transform world coordinates to robot-local coordinates
-            # The controller expects positions relative to the robot's base frame
-            object_world_pos = observations["pickup_object"]["position"]
-            target_world_pos = observations["pickup_object"]["target_position"]
+            for task_idx, task in enumerate(self._tasks):
+                # Skip if this task is already done
+                if task['controller'].is_done():
+                    if not task['done_logged']:
+                        print(f"✓ {task['name']} complete!")
+                        task['done_logged'] = True
+                    continue
 
-            # Subtract robot base position to get robot-local coordinates
-            object_local_pos = object_world_pos - self._robot_position
-            target_local_pos = target_world_pos - self._robot_position
+                all_done = False
 
-            # Compute actions using robot-local coordinates
-            actions = self._controller.forward(
-                picking_position=object_local_pos,
-                placing_position=target_local_pos,
-                current_joint_positions=observations["cobotta_robot"]["joint_positions"],
-                end_effector_offset=np.array([0, 0, 0.25]),
-            )
+                # Get observations for this task
+                observations = task['setup'].get_observations(task['robot'])
 
-            # Check completion
-            if self._controller.is_done():
-                if not hasattr(self, '_task_done_logged'):
-                    print("✓ Pick and place complete!")
-                    self._update_status("Task complete!", error=False)
-                    self._task_done_logged = True
+                # Transform world coordinates to robot-local coordinates
+                # The controller expects positions relative to the robot's base frame
+                object_world_pos = observations["pickup_object"]["position"]
+                target_world_pos = observations["pickup_object"]["target_position"]
 
-            # Apply actions
-            if actions:
-                self._articulation_controller.apply_action(actions)
+                # Subtract robot base position to get robot-local coordinates
+                object_local_pos = object_world_pos - task['robot_position']
+                target_local_pos = target_world_pos - task['robot_position']
+
+                # Compute actions using robot-local coordinates
+                actions = task['controller'].forward(
+                    picking_position=object_local_pos,
+                    placing_position=target_local_pos,
+                    current_joint_positions=observations["cobotta_robot"]["joint_positions"],
+                    end_effector_offset=np.array([0, 0, 0.25]),
+                )
+
+                # Apply actions for this task
+                if actions:
+                    task['articulation_controller'].apply_action(actions)
+
+            # All tasks complete
+            if all_done and not hasattr(self, '_all_tasks_done_logged'):
+                print("\n" + "="*70)
+                print(f"✓ ALL {len(self._tasks)} TASKS COMPLETE!")
+                print("="*70)
+                self._update_status(f"All {len(self._tasks)} tasks complete!", error=False)
+                self._all_tasks_done_logged = True
 
         except Exception as e:
             print(f"Error in control loop: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _update_status(self, message: str, error: bool = False):
         """Update status label."""
