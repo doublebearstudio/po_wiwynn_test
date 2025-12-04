@@ -111,6 +111,11 @@ class MyExtension(omni.ext.IExt):
         self._pickup_pos_fields = []  # X, Y, Z fields
         self._target_pos_fields = []  # X, Y, Z fields
 
+        # Task management
+        self._task_count = 0
+        self._tasks = []  # List of task dictionaries
+        self._tasks_container = None  # Container for task frames
+
         # Get timeline interface
         self._timeline = get_timeline_interface()
 
@@ -180,208 +185,31 @@ class MyExtension(omni.ext.IExt):
                     }
                 )
 
-                ui.Spacer(height=10)
+                ui.Spacer(height=5)
 
-                # Scene Parameters
-                with ui.CollapsableFrame("Scene Parameters", height=0, collapsed=True):
-                    with ui.VStack(spacing=5):
-                        # Target Object
-                        with ui.HStack(spacing=5):
-                            ui.Label("Target Object:", style={"font_size": 11}, width=100)
-                            self._target_object_field = ui.StringField(height=20)
-                            self._target_object_field.model.set_value(self._custom_usd_path)
-
-                        ui.Spacer(height=3)
-
-                        # Robot Position
-                        ui.Label("Robot Position (m):", style={"font_size": 11})
-                        with ui.HStack(spacing=5):
-                            ui.Label("X:", style={"font_size": 10}, width=15)
-                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_x.model.set_value(self._robot_position[0])
-                            self._robot_pos_fields.append(field_x)
-
-                            ui.Label("Y:", style={"font_size": 10}, width=15)
-                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_y.model.set_value(self._robot_position[1])
-                            self._robot_pos_fields.append(field_y)
-
-                            ui.Label("Z:", style={"font_size": 10}, width=15)
-                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_z.model.set_value(self._robot_position[2])
-                            self._robot_pos_fields.append(field_z)
-
-                        ui.Spacer(height=3)
-
-                        # Pickup Position
-                        ui.Label("Pickup Position (m):", style={"font_size": 11})
-                        with ui.HStack(spacing=5):
-                            ui.Label("X:", style={"font_size": 10}, width=15)
-                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_x.model.set_value(self._initial_position[0])
-                            self._pickup_pos_fields.append(field_x)
-
-                            ui.Label("Y:", style={"font_size": 10}, width=15)
-                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_y.model.set_value(self._initial_position[1])
-                            self._pickup_pos_fields.append(field_y)
-
-                            ui.Label("Z:", style={"font_size": 10}, width=15)
-                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_z.model.set_value(self._initial_position[2])
-                            self._pickup_pos_fields.append(field_z)
-
-                        ui.Spacer(height=3)
-
-                        # Target Position
-                        ui.Label("Target Position (m):", style={"font_size": 11})
-                        with ui.HStack(spacing=5):
-                            ui.Label("X:", style={"font_size": 10}, width=15)
-                            field_x = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_x.model.set_value(self._target_position[0])
-                            self._target_pos_fields.append(field_x)
-
-                            ui.Label("Y:", style={"font_size": 10}, width=15)
-                            field_y = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_y.model.set_value(self._target_position[1])
-                            self._target_pos_fields.append(field_y)
-
-                            ui.Label("Z:", style={"font_size": 10}, width=15)
-                            field_z = ui.FloatField(height=20, width=ui.Percent(30))
-                            field_z.model.set_value(self._target_position[2])
-                            self._target_pos_fields.append(field_z)
-
-                        ui.Spacer(height=8)
-
-                        # Reset and Update buttons
-                        with ui.HStack(spacing=5):
-                            ui.Button(
-                                "Reset",
-                                clicked_fn=self._on_reset_scene_params,
-                                height=25,
-                                style={
-                                    "Button": {
-                                        "background_color": 0xFF666666,
-                                        "font_size": 12
-                                    }
-                                }
-                            )
-                            ui.Button(
-                                "Update",
-                                clicked_fn=self._on_update_scene_params,
-                                height=25,
-                                style={
-                                    "Button": {
-                                        "background_color": 0xFF2288FF,
-                                        "font_size": 12
-                                    }
-                                }
-                            )
-
-                # Robot Parameters
-                with ui.CollapsableFrame("Robot Parameters", height=0, collapsed=True):
-                    with ui.VStack(spacing=3):
-                        ui.Label("Robot Prim Path:", style={"font_size": 11})
-                        ui.Label(
-                            "  /World/cobotta_pro_900",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
-
-                        ui.Spacer(height=5)
-
-                        ui.Label("End Effector:", style={"font_size": 11})
-                        ui.Label(
-                            "  onrobot_rg6_base_link",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
-
-                        ui.Spacer(height=5)
-
-                        ui.Label("Gripper Type:", style={"font_size": 11})
-                        ui.Label(
-                            "  Parallel Gripper (OnRobot RG6)",
-                            style={"font_size": 10, "color": 0xFFAAAAAA}
-                        )
-
-                        ui.Spacer(height=10)
-                        ui.Separator()
-                        ui.Spacer(height=10)
-
-                        # Robot Arm Event Timing
-                        tooltip_text = """Event Timing Breakdown (events_dt):
-    The events_dt list controls how long the controller spends in each state
-    before transitioning to the next. Each value is in seconds.
-
-    Index | State                    | Default (s) | Description
-    ------|--------------------------|-------------|-----------------------------
-    0     | Move to pre-grasp        | 0.005       | Approach above object
-    1     | Descend to grasp height  | 0.002       | Lower to picking position
-    2     | Wait before grasp        | 1.000       | Stabilization pause
-    3     | Close gripper            | 0.050       | Grasp object
-    4     | Wait after grasp         | 0.0008      | Ensure firm grip
-    5     | Lift object              | 0.005       | Raise object up
-    6     | Move to target           | 0.0008      | Navigate to placement
-    7     | Lower to place height    | 0.100       | Descend to place
-    8     | Open gripper             | 0.0008      | Release object
-    9     | Retreat                  | 0.008       | Move away from object"""
-
-                        ui.Label(
-                            "Robot Arm Event Timing:",
-                            style={"font_size": 11},
-                            tooltip=tooltip_text
-                        )
-
-                        ui.Spacer(height=5)
-
-                        # Create float fields for events_dt (2 rows, 5 pairs each)
-                        # Row 1: indices 0-4
-                        with ui.HStack(spacing=5, height=0):
-                            for i in range(5):
-                                with ui.VStack(spacing=2, width=ui.Percent(20)):
-                                    ui.Label(f"{i}:", style={"font_size": 9})
-                                    field = ui.FloatField(height=20)
-                                    field.model.set_value(self._current_events_dt[i])
-                                    self._events_dt_fields.append(field)
-
-                        ui.Spacer(height=5)
-
-                        # Row 2: indices 5-9
-                        with ui.HStack(spacing=5, height=0):
-                            for i in range(5, 10):
-                                with ui.VStack(spacing=2, width=ui.Percent(20)):
-                                    ui.Label(f"{i}:", style={"font_size": 9})
-                                    field = ui.FloatField(height=20)
-                                    field.model.set_value(self._current_events_dt[i])
-                                    self._events_dt_fields.append(field)
-
-                        ui.Spacer(height=8)
-
-                        # Reset and Update buttons
-                        with ui.HStack(spacing=5):
-                            ui.Button(
-                                "Reset",
-                                clicked_fn=self._on_reset_events_dt,
-                                height=25,
-                                style={
-                                    "Button": {
-                                        "background_color": 0xFF666666,
-                                        "font_size": 12
-                                    }
-                                }
-                            )
-                            ui.Button(
-                                "Update",
-                                clicked_fn=self._on_update_events_dt,
-                                height=25,
-                                style={
-                                    "Button": {
-                                        "background_color": 0xFF2288FF,
-                                        "font_size": 12
-                                    }
-                                }
-                            )
+                # Add Task Button
+                ui.Button(
+                    "Add Task",
+                    clicked_fn=self._on_add_task_clicked,
+                    height=50,
+                    style={
+                        "Button": {
+                            "background_color": 0xFFFF8822,
+                            "border_radius": 5,
+                            "font_size": 16
+                        }
+                    }
+                )
 
                 ui.Spacer(height=10)
+
+                # Tasks Container - dynamically created task frames will go here
+                self._tasks_container = ui.VStack(spacing=10, height=0)
+
+                with self._tasks_container:
+                    pass  # Task frames will be added dynamically
+
+                # (Scene Parameters and Robot Parameters are now created dynamically inside task frames)
 
                 # Status Section (at the bottom)
                 ui.Label("Status:", style={"font_size": 12, "color": 0xFFAAAAFF})
@@ -411,6 +239,364 @@ class MyExtension(omni.ext.IExt):
         if self._window:
             self._window.destroy()
             self._window = None
+
+    def _on_add_task_clicked(self):
+        """Handle Add Task button - Create a new task frame with Scene Parameters and Robot Parameters."""
+        self._task_count += 1
+        task_name = f"Task{self._task_count}"
+        print(f"[RobotPickup] Adding {task_name}")
+
+        # Create storage for this task's UI fields
+        task_data = {
+            'name': task_name,
+            'target_object_field': None,
+            'robot_pos_fields': [],
+            'pickup_pos_fields': [],
+            'target_pos_fields': [],
+            'events_dt_fields': [],
+            'custom_usd_path': self._default_custom_usd_path,
+            'robot_position': self._default_robot_position.copy(),
+            'initial_position': self._default_initial_position.copy(),
+            'target_position': self._default_target_position.copy(),
+            'events_dt': self._default_events_dt.copy()
+        }
+
+        # Add task UI inside the tasks container
+        with self._tasks_container:
+            with ui.CollapsableFrame(task_name, height=0, collapsed=False):
+                with ui.VStack(spacing=10):
+                    # Scene Parameters
+                    with ui.CollapsableFrame("Scene Parameters", height=0, collapsed=False):
+                        with ui.VStack(spacing=5):
+                            # Target Object
+                            with ui.HStack(spacing=5):
+                                ui.Label("Target Object:", style={"font_size": 11}, width=100)
+                                task_data['target_object_field'] = ui.StringField(height=20)
+                                task_data['target_object_field'].model.set_value(task_data['custom_usd_path'])
+
+                            ui.Spacer(height=3)
+
+                            # Robot Position
+                            ui.Label("Robot Position (m):", style={"font_size": 11})
+                            with ui.HStack(spacing=5):
+                                ui.Label("X:", style={"font_size": 10}, width=15)
+                                field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_x.model.set_value(task_data['robot_position'][0])
+                                task_data['robot_pos_fields'].append(field_x)
+
+                                ui.Label("Y:", style={"font_size": 10}, width=15)
+                                field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_y.model.set_value(task_data['robot_position'][1])
+                                task_data['robot_pos_fields'].append(field_y)
+
+                                ui.Label("Z:", style={"font_size": 10}, width=15)
+                                field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_z.model.set_value(task_data['robot_position'][2])
+                                task_data['robot_pos_fields'].append(field_z)
+
+                            ui.Spacer(height=3)
+
+                            # Pickup Position
+                            ui.Label("Pickup Position (m):", style={"font_size": 11})
+                            with ui.HStack(spacing=5):
+                                ui.Label("X:", style={"font_size": 10}, width=15)
+                                field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_x.model.set_value(task_data['initial_position'][0])
+                                task_data['pickup_pos_fields'].append(field_x)
+
+                                ui.Label("Y:", style={"font_size": 10}, width=15)
+                                field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_y.model.set_value(task_data['initial_position'][1])
+                                task_data['pickup_pos_fields'].append(field_y)
+
+                                ui.Label("Z:", style={"font_size": 10}, width=15)
+                                field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_z.model.set_value(task_data['initial_position'][2])
+                                task_data['pickup_pos_fields'].append(field_z)
+
+                            ui.Spacer(height=3)
+
+                            # Target Position
+                            ui.Label("Target Position (m):", style={"font_size": 11})
+                            with ui.HStack(spacing=5):
+                                ui.Label("X:", style={"font_size": 10}, width=15)
+                                field_x = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_x.model.set_value(task_data['target_position'][0])
+                                task_data['target_pos_fields'].append(field_x)
+
+                                ui.Label("Y:", style={"font_size": 10}, width=15)
+                                field_y = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_y.model.set_value(task_data['target_position'][1])
+                                task_data['target_pos_fields'].append(field_y)
+
+                                ui.Label("Z:", style={"font_size": 10}, width=15)
+                                field_z = ui.FloatField(height=20, width=ui.Percent(30))
+                                field_z.model.set_value(task_data['target_position'][2])
+                                task_data['target_pos_fields'].append(field_z)
+
+                            ui.Spacer(height=8)
+
+                            # Reset and Update buttons
+                            with ui.HStack(spacing=5):
+                                ui.Button(
+                                    "Reset",
+                                    clicked_fn=lambda task=task_data: self._on_reset_task_params(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF666666,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+                                ui.Button(
+                                    "Update",
+                                    clicked_fn=lambda task=task_data: self._on_update_task_params(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF2288FF,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+
+                    # Robot Parameters
+                    with ui.CollapsableFrame("Robot Parameters", height=0, collapsed=True):
+                        with ui.VStack(spacing=3):
+                            ui.Label("Robot Prim Path:", style={"font_size": 11})
+                            ui.Label(
+                                "  /World/cobotta_pro_900",
+                                style={"font_size": 10, "color": 0xFFAAAAAA}
+                            )
+
+                            ui.Spacer(height=5)
+
+                            ui.Label("End Effector:", style={"font_size": 11})
+                            ui.Label(
+                                "  onrobot_rg6_base_link",
+                                style={"font_size": 10, "color": 0xFFAAAAAA}
+                            )
+
+                            ui.Spacer(height=5)
+
+                            ui.Label("Gripper Type:", style={"font_size": 11})
+                            ui.Label(
+                                "  Parallel Gripper (OnRobot RG6)",
+                                style={"font_size": 10, "color": 0xFFAAAAAA}
+                            )
+
+                            ui.Spacer(height=10)
+                            ui.Separator()
+                            ui.Spacer(height=10)
+
+                            # Robot Arm Event Timing
+                            tooltip_text = """Event Timing Breakdown (events_dt):
+    The events_dt list controls how long the controller spends in each state
+    before transitioning to the next. Each value is in seconds.
+
+    Index | State                    | Default (s) | Description
+    ------|--------------------------|-------------|-----------------------------
+    0     | Move to pre-grasp        | 0.005       | Approach above object
+    1     | Descend to grasp height  | 0.002       | Lower to picking position
+    2     | Wait before grasp        | 1.000       | Stabilization pause
+    3     | Close gripper            | 0.050       | Grasp object
+    4     | Wait after grasp         | 0.0008      | Ensure firm grip
+    5     | Lift object              | 0.005       | Raise object up
+    6     | Move to target           | 0.0008      | Navigate to placement
+    7     | Lower to place height    | 0.100       | Descend to place
+    8     | Open gripper             | 0.0008      | Release object
+    9     | Retreat                  | 0.008       | Move away from object"""
+
+                            ui.Label(
+                                "Robot Arm Event Timing:",
+                                style={"font_size": 11},
+                                tooltip=tooltip_text
+                            )
+
+                            ui.Spacer(height=5)
+
+                            # Create float fields for events_dt (2 rows, 5 pairs each)
+                            # Row 1: indices 0-4
+                            with ui.HStack(spacing=5, height=0):
+                                for i in range(5):
+                                    with ui.VStack(spacing=2, width=ui.Percent(20)):
+                                        ui.Label(f"{i}:", style={"font_size": 9})
+                                        field = ui.FloatField(height=20)
+                                        field.model.set_value(task_data['events_dt'][i])
+                                        task_data['events_dt_fields'].append(field)
+
+                            ui.Spacer(height=5)
+
+                            # Row 2: indices 5-9
+                            with ui.HStack(spacing=5, height=0):
+                                for i in range(5, 10):
+                                    with ui.VStack(spacing=2, width=ui.Percent(20)):
+                                        ui.Label(f"{i}:", style={"font_size": 9})
+                                        field = ui.FloatField(height=20)
+                                        field.model.set_value(task_data['events_dt'][i])
+                                        task_data['events_dt_fields'].append(field)
+
+                            ui.Spacer(height=8)
+
+                            # Reset and Update buttons
+                            with ui.HStack(spacing=5):
+                                ui.Button(
+                                    "Reset",
+                                    clicked_fn=lambda task=task_data: self._on_reset_task_events_dt(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF666666,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+                                ui.Button(
+                                    "Update",
+                                    clicked_fn=lambda task=task_data: self._on_update_task_events_dt(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF2288FF,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+
+        # Store task data
+        self._tasks.append(task_data)
+        self._update_status(f"{task_name} added successfully!", error=False)
+        print(f"[RobotPickup] {task_name} created. Total tasks: {len(self._tasks)}")
+
+    def _on_reset_task_params(self, task):
+        """Reset scene parameters for a specific task."""
+        task['custom_usd_path'] = self._default_custom_usd_path
+        task['robot_position'] = self._default_robot_position.copy()
+        task['initial_position'] = self._default_initial_position.copy()
+        task['target_position'] = self._default_target_position.copy()
+
+        task['target_object_field'].model.set_value(task['custom_usd_path'])
+        for i, field in enumerate(task['robot_pos_fields']):
+            field.model.set_value(task['robot_position'][i])
+        for i, field in enumerate(task['pickup_pos_fields']):
+            field.model.set_value(task['initial_position'][i])
+        for i, field in enumerate(task['target_pos_fields']):
+            field.model.set_value(task['target_position'][i])
+
+        self._update_status(f"{task['name']} parameters reset to defaults.", error=False)
+
+    def _on_update_task_params(self, task):
+        """Update scene parameters for a specific task from UI fields."""
+        # Read current values from UI
+        new_usd_path = task['target_object_field'].model.get_value_as_string()
+        new_robot_pos = np.array([
+            task['robot_pos_fields'][0].model.get_value_as_float(),
+            task['robot_pos_fields'][1].model.get_value_as_float(),
+            task['robot_pos_fields'][2].model.get_value_as_float()
+        ])
+        new_pickup_pos = np.array([
+            task['pickup_pos_fields'][0].model.get_value_as_float(),
+            task['pickup_pos_fields'][1].model.get_value_as_float(),
+            task['pickup_pos_fields'][2].model.get_value_as_float()
+        ])
+        new_target_pos = np.array([
+            task['target_pos_fields'][0].model.get_value_as_float(),
+            task['target_pos_fields'][1].model.get_value_as_float(),
+            task['target_pos_fields'][2].model.get_value_as_float()
+        ])
+
+        # Detect changes
+        usd_changed = new_usd_path != task['custom_usd_path']
+        robot_changed = not np.array_equal(new_robot_pos, task['robot_position'])
+        pickup_changed = not np.array_equal(new_pickup_pos, task['initial_position'])
+        target_changed = not np.array_equal(new_target_pos, task['target_position'])
+
+        # Update task dictionary
+        task['custom_usd_path'] = new_usd_path
+        task['robot_position'] = new_robot_pos
+        task['initial_position'] = new_pickup_pos
+        task['target_position'] = new_target_pos
+
+        print(f"[RobotPickup] {task['name']} - Updated USD: {new_usd_path}")
+        print(f"[RobotPickup] {task['name']} - Updated Robot: {new_robot_pos}")
+        print(f"[RobotPickup] {task['name']} - Updated Pickup: {new_pickup_pos}")
+        print(f"[RobotPickup] {task['name']} - Updated Target: {new_target_pos}")
+
+        # If this is the first task and scene is already set up, update the actual USD scene
+        if len(self._tasks) > 0 and self._tasks[0] == task and self._setup:
+            # Update global variables
+            self._custom_usd_path = new_usd_path
+            self._robot_position = new_robot_pos
+            self._initial_position = new_pickup_pos
+            self._target_position = new_target_pos
+
+            # Update setup object
+            self._setup.robot_position = new_robot_pos.copy()
+            self._setup._object_initial_position = new_pickup_pos.copy()
+            self._setup._target_position = new_target_pos.copy()
+
+            # Update the prim positions in USD if objects exist
+            stage = omni.usd.get_context().get_stage()
+
+            if robot_changed and stage.GetPrimAtPath("/World/cobotta"):
+                prim = stage.GetPrimAtPath("/World/cobotta")
+                xform = UsdGeom.Xformable(prim)
+                xform.ClearXformOpOrder()
+                xform_op = xform.AddTranslateOp()
+                xform_op.Set(tuple(new_robot_pos))
+                print(f"[RobotPickup] Updated robot position in USD scene")
+
+            if pickup_changed and stage.GetPrimAtPath("/World/pickup_object"):
+                prim = stage.GetPrimAtPath("/World/pickup_object")
+                xform = UsdGeom.Xformable(prim)
+                xform.ClearXformOpOrder()
+                xform_op = xform.AddTranslateOp()
+                xform_op.Set(tuple(new_pickup_pos))
+                print(f"[RobotPickup] Updated pickup object position in USD scene")
+
+            if target_changed and stage.GetPrimAtPath("/World/target_marker"):
+                prim = stage.GetPrimAtPath("/World/target_marker")
+                xform = UsdGeom.Xformable(prim)
+                xform.ClearXformOpOrder()
+                xform_op = xform.AddTranslateOp()
+                xform_op.Set(tuple(new_target_pos))
+                print(f"[RobotPickup] Updated target marker position in USD scene")
+
+            if usd_changed:
+                self._update_status(f"{task['name']} updated! USD path changed - reset scene to apply.", error=False)
+            else:
+                self._update_status(f"{task['name']} parameters updated in scene!", error=False)
+        else:
+            self._update_status(f"{task['name']} parameters updated!", error=False)
+
+    def _on_reset_task_events_dt(self, task):
+        """Reset event timing for a specific task."""
+        task['events_dt'] = self._default_events_dt.copy()
+        for i, field in enumerate(task['events_dt_fields']):
+            field.model.set_value(task['events_dt'][i])
+        self._update_status(f"{task['name']} event timing reset to defaults.", error=False)
+
+    def _on_update_task_events_dt(self, task):
+        """Update event timing for a specific task from UI fields."""
+        for i, field in enumerate(task['events_dt_fields']):
+            task['events_dt'][i] = field.model.get_value_as_float()
+
+        print(f"[RobotPickup] {task['name']} - Updated events_dt: {task['events_dt']}")
+
+        # If this is the first task and scene is already set up, update the controller
+        if len(self._tasks) > 0 and self._tasks[0] == task and self._controller:
+            self._current_events_dt = task['events_dt'].copy()
+            try:
+                # Update the controller's events_dt
+                self._controller._events_dt = self._current_events_dt.copy()
+                self._update_status(f"{task['name']} event timing updated! Will apply on next simulation start.", error=False)
+                print(f"[RobotPickup] Controller events_dt updated to: {self._current_events_dt}")
+            except Exception as e:
+                self._update_status(f"Error updating controller: {str(e)}", error=True)
+                print(f"[RobotPickup] Error updating controller events_dt: {e}")
+        else:
+            self._update_status(f"{task['name']} event timing updated!", error=False)
 
     def _on_empty_scene_clicked(self):
         """Handle New Scene button - Create a new empty stage."""
@@ -474,6 +660,12 @@ class MyExtension(omni.ext.IExt):
         """Handle Setup Scene button - Set up the entire pick-and-place scene."""
         print("[RobotPickup] Setup Scene button clicked")
 
+        # Check if tasks have been created
+        if len(self._tasks) == 0:
+            self._update_status("Warning: No tasks created! Please click 'Add Task' first.", error=True)
+            print("[RobotPickup] Warning: No tasks created")
+            return
+
         if self._scene_setup_complete:
             self._update_status("Scene already set up. Press PLAY to start.", error=False)
             return
@@ -486,9 +678,18 @@ class MyExtension(omni.ext.IExt):
                 self._update_status("Error: Required modules not available!", error=True)
                 return
 
+            # Use first task's parameters for now (TODO: support multiple tasks)
+            first_task = self._tasks[0]
+            self._custom_usd_path = first_task['custom_usd_path']
+            self._robot_position = first_task['robot_position']
+            self._initial_position = first_task['initial_position']
+            self._target_position = first_task['target_position']
+            self._current_events_dt = first_task['events_dt']
+
             print("="*70)
             print("PICK AND PLACE SETUP")
             print("="*70)
+            print(f"Using parameters from {first_task['name']}")
 
             # Create setup helper
             print("\n→ Setting up scene...")
