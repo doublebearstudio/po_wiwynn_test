@@ -85,8 +85,8 @@ class MyExtension(omni.ext.IExt):
 
         # Scene configuration
         self._robot_position = np.array([0.0, 0.0, 0.0])
-        self._initial_position = np.array([-0.5, 0.4, 0.125])
-        self._target_position = np.array([-0.6, -0.5, 0.135])
+        self._initial_position = np.array([-0.5, 0.4, 0.04])
+        self._target_position = np.array([-0.6, -0.5, 0.04])
         self._custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
         self._table_path = "D:/poc/po_wiwynn_test/prp_table02.usda"
 
@@ -545,8 +545,8 @@ class MyExtension(omni.ext.IExt):
         if task['setup'] is not None:
             # Update setup object
             task['setup'].robot_position = new_robot_pos.copy()
-            task['setup']._object_initial_position = new_pickup_pos.copy()
-            task['setup']._target_position = new_target_pos.copy()
+            task['setup'].object_initial_position = new_pickup_pos.copy()
+            task['setup'].target_position = new_target_pos.copy()
 
             # Update the prim positions in USD if objects exist
             stage = omni.usd.get_context().get_stage()
@@ -944,8 +944,8 @@ class MyExtension(omni.ext.IExt):
                 if robot_changed or pickup_changed or target_changed:
                     # Update positions in the setup object
                     self._setup.robot_position = self._robot_position.copy()
-                    self._setup._object_initial_position = self._initial_position.copy()
-                    self._setup._target_position = self._target_position.copy()
+                    self._setup.object_initial_position = self._initial_position.copy()
+                    self._setup.target_position = self._target_position.copy()
 
                     # Update the prim positions in USD if objects exist
                     stage = omni.usd.get_context().get_stage()
