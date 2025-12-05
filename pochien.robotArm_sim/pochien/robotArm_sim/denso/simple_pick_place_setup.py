@@ -80,10 +80,12 @@ class PickPlaceSceneSetup:
         add_reference_to_stage(usd_path=robot_asset, prim_path=self.robot_prim_path)
 
         # Set robot position
+        # Clear existing transforms and set new position to avoid conflicts with referenced USD
         prim = self._stage.GetPrimAtPath(self.robot_prim_path)
         xformable = UsdGeom.Xformable(prim)
-        xform_api = UsdGeom.XformCommonAPI(xformable)
-        xform_api.SetTranslate(Gf.Vec3d(
+        xformable.ClearXformOpOrder()  # Clear any existing transforms from the USD file
+        xform_op = xformable.AddTranslateOp()  # Add a new translate operation
+        xform_op.Set(Gf.Vec3d(
             float(self.robot_position[0]),
             float(self.robot_position[1]),
             float(self.robot_position[2])
@@ -99,9 +101,11 @@ class PickPlaceSceneSetup:
         )
 
         # Create manipulator
+        # Generate unique name based on prim path to avoid conflicts with multiple robots
+        robot_unique_name = f"cobotta_robot_{self.robot_prim_path.split('/')[-1]}"
         manipulator = SingleManipulator(
             prim_path=self.robot_prim_path,
-            name="cobotta_robot",
+            name=robot_unique_name,
             end_effector_prim_name="onrobot_rg6_base_link",
             gripper=gripper
         )
@@ -132,9 +136,11 @@ class PickPlaceSceneSetup:
         prim = self._stage.GetPrimAtPath(self.object_prim_path)
 
         # Set position
+        # Clear existing transforms and set new position
         xformable = UsdGeom.Xformable(prim)
-        xform_api = UsdGeom.XformCommonAPI(xformable)
-        xform_api.SetTranslate(Gf.Vec3d(
+        xformable.ClearXformOpOrder()
+        xform_op = xformable.AddTranslateOp()
+        xform_op.Set(Gf.Vec3d(
             float(self.object_initial_position[0]),
             float(self.object_initial_position[1]),
             float(self.object_initial_position[2])
