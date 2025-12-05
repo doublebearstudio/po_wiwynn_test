@@ -5,7 +5,7 @@ This file demonstrates how to use the TaskScheduler with various event controls.
 
 Examples:
 - Example 1: Two tasks with task1 disabled (won't execute even though created in scene)
-- Example 2: Three tasks in sequence with pauses (task1 → 3s → task2 → 6s → task3)
+- Example 2: Five tasks in sequence with pauses (task1 → 3s → task2 → 6s → task3 → 2s → task4 → 1s → task5)
 
 Usage:
 1. Open Isaac Sim
@@ -207,27 +207,27 @@ def example_1_disabled_task():
 
 
 # ============================================================================
-# EXAMPLE 2: Three Tasks in Sequence with Pauses
+# EXAMPLE 2: Five Tasks in Sequence with Pauses
 # ============================================================================
 def example_2_sequential_with_pauses():
     """
-    Example 2: Three tasks in sequence with pauses
+    Example 2: Five tasks in sequence with pauses
 
     Demonstrates:
-    - Creating three tasks
-    - Sequential execution: task1 → pause 3s → task2 → pause 6s → task3
+    - Creating five tasks
+    - Sequential execution: task1 → 3s → task2 → 6s → task3 → 2s → task4 → 1s → task5
     - Configurable pause durations between tasks
 
     Expected behavior:
-    - Task1 executes first
-    - After completion, system pauses for 3 seconds
-    - Task2 executes
-    - After completion, system pauses for 6 seconds
-    - Task3 executes
+    - Task1 executes first, then pauses for 3 seconds
+    - Task2 executes, then pauses for 6 seconds
+    - Task3 executes, then pauses for 2 seconds
+    - Task4 executes, then pauses for 1 second
+    - Task5 executes (final task, no pause)
     - Simulation completes
     """
     print("="*70)
-    print("EXAMPLE 2: THREE TASKS IN SEQUENCE WITH PAUSES")
+    print("EXAMPLE 2: FIVE TASKS IN SEQUENCE WITH PAUSES")
     print("="*70)
 
     # ========================================================================
@@ -263,10 +263,30 @@ def example_2_sequential_with_pauses():
         "target_marker_path": "/World/target_marker_task3"
     }
 
+    task4_config = {
+        "robot_position": np.array([3.0, 0.0, 0.0]),
+        "initial_position": np.array([2.5, 0.4, 0.04]),
+        "target_position": np.array([2.4, -0.5, 0.04]),
+        "custom_usd_path": "D:/poc/po_wiwynn_test/tst_cylinder01.usda",
+        "robot_prim_path": "/World/cobotta_task4",
+        "object_prim_path": "/World/pickup_object_task4",
+        "target_marker_path": "/World/target_marker_task4"
+    }
+
+    task5_config = {
+        "robot_position": np.array([4.0, 0.0, 0.0]),
+        "initial_position": np.array([3.5, 0.4, 0.04]),
+        "target_position": np.array([3.4, -0.5, 0.04]),
+        "custom_usd_path": "D:/poc/po_wiwynn_test/tst_cylinder01.usda",
+        "robot_prim_path": "/World/cobotta_task5",
+        "object_prim_path": "/World/pickup_object_task5",
+        "target_marker_path": "/World/target_marker_task5"
+    }
+
     # ========================================================================
-    # 2. Setup Scene - Create All Three Tasks
+    # 2. Setup Scene - Create All Five Tasks
     # ========================================================================
-    print("\n→ Setting up scene with 3 tasks...")
+    print("\n→ Setting up scene with 5 tasks...")
 
     # Add table
     table_path = "D:/poc/po_wiwynn_test/prp_table02.usda"
@@ -338,6 +358,50 @@ def example_2_sequential_with_pauses():
     )
     articulation_controller3 = robot3.get_articulation_controller()
 
+    # Create Task 4
+    print("  → Creating Task4...")
+    setup4 = PickPlaceSceneSetup(
+        custom_usd_path=task4_config["custom_usd_path"],
+        object_initial_position=task4_config["initial_position"],
+        target_position=task4_config["target_position"],
+        robot_position=task4_config["robot_position"],
+        robot_prim_path=task4_config["robot_prim_path"],
+        object_prim_path=task4_config["object_prim_path"]
+    )
+    setup4.target_marker_path = task4_config["target_marker_path"]
+    robot4 = setup4.create_robot()
+    setup4.create_object(mass=0.01)
+    setup4.create_target_marker()
+
+    controller4 = PickPlaceController(
+        name="controller_task4",
+        robot_articulation=robot4,
+        gripper=robot4.gripper
+    )
+    articulation_controller4 = robot4.get_articulation_controller()
+
+    # Create Task 5
+    print("  → Creating Task5...")
+    setup5 = PickPlaceSceneSetup(
+        custom_usd_path=task5_config["custom_usd_path"],
+        object_initial_position=task5_config["initial_position"],
+        target_position=task5_config["target_position"],
+        robot_position=task5_config["robot_position"],
+        robot_prim_path=task5_config["robot_prim_path"],
+        object_prim_path=task5_config["object_prim_path"]
+    )
+    setup5.target_marker_path = task5_config["target_marker_path"]
+    robot5 = setup5.create_robot()
+    setup5.create_object(mass=0.01)
+    setup5.create_target_marker()
+
+    controller5 = PickPlaceController(
+        name="controller_task5",
+        robot_articulation=robot5,
+        gripper=robot5.gripper
+    )
+    articulation_controller5 = robot5.get_articulation_controller()
+
     print("✓ Scene setup complete")
 
     # ========================================================================
@@ -356,7 +420,7 @@ def example_2_sequential_with_pauses():
         robot_position=task1_config["robot_position"],
         enabled=True,
         order=0,
-        pause_after=3.0  # ⏸ Pause 3 seconds after completion
+        pause_after=0.0  # ⏸ Pause 3 seconds after completion
     )
 
     # Add Task2 - Will pause 6 seconds after completion
@@ -368,11 +432,11 @@ def example_2_sequential_with_pauses():
         articulation_controller=articulation_controller2,
         robot_position=task2_config["robot_position"],
         enabled=True,
-        order=0,
-        pause_after=6.0  # ⏸ Pause 6 seconds after completion
+        order=1,
+        pause_after=0.0  # ⏸ Pause 6 seconds after completion
     )
 
-    # Add Task3 - No pause after (it's the last task)
+    # Add Task3 - Will pause 2 seconds after completion
     scheduler.add_task(
         task_id="task3",
         setup=setup3,
@@ -381,7 +445,33 @@ def example_2_sequential_with_pauses():
         articulation_controller=articulation_controller3,
         robot_position=task3_config["robot_position"],
         enabled=True,
-        order=2,
+        order=1,
+        pause_after=0.0  # ⏸ Pause 2 seconds after completion
+    )
+
+    # Add Task4 - Will pause 1 second after completion
+    scheduler.add_task(
+        task_id="task4",
+        setup=setup4,
+        robot=robot4,
+        controller=controller4,
+        articulation_controller=articulation_controller4,
+        robot_position=task4_config["robot_position"],
+        enabled=True,
+        order=0,
+        pause_after=0.0  # ⏸ Pause 1 second after completion
+    )
+
+    # Add Task5 - No pause after (it's the last task)
+    scheduler.add_task(
+        task_id="task5",
+        setup=setup5,
+        robot=robot5,
+        controller=controller5,
+        articulation_controller=articulation_controller5,
+        robot_position=task5_config["robot_position"],
+        enabled=True,
+        order=0,
         pause_after=0.0  # No pause (last task)
     )
 
@@ -415,7 +505,9 @@ def example_2_sequential_with_pauses():
     print("="*70)
     print("→ Task1: Will execute first, then pause 3 seconds")
     print("→ Task2: Will execute after pause, then pause 6 seconds")
-    print("→ Task3: Will execute after pause (no pause after)")
+    print("→ Task3: Will execute after pause, then pause 2 seconds")
+    print("→ Task4: Will execute after pause, then pause 1 second")
+    print("→ Task5: Will execute after pause (no pause after - final task)")
     print("→ Press ▶ PLAY button to start")
     print("→ To stop: physics_subscription.unsubscribe()")
     print("="*70)
@@ -429,7 +521,7 @@ def example_2_sequential_with_pauses():
 if __name__ == "__main__":
     print("\nAvailable examples:")
     print("1. example_1_disabled_task() - Two tasks with task1 disabled")
-    print("2. example_2_sequential_with_pauses() - Three tasks with pauses")
+    print("2. example_2_sequential_with_pauses() - Five tasks with pauses")
     print("\nTo run an example, call the function:")
     print("  scheduler, physics_sub, timeline_sub = example_1_disabled_task()")
     print("  scheduler, physics_sub, timeline_sub = example_2_sequential_with_pauses()")
