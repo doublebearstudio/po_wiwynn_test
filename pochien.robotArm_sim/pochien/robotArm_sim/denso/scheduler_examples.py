@@ -63,9 +63,9 @@ def example_1_disabled_task():
     # 1. Define Task Configurations
     # ========================================================================
     task1_config = {
-        "robot_position": np.array([0.0, 0.0, 0.0]),
-        "initial_position": np.array([-0.5, 0.4, 0.04]),
-        "target_position": np.array([-0.6, -0.5, 0.04]),
+        "robot_position": np.array([1.0, 1.0, 0.0]),
+        "initial_position": np.array([0.5, 1.4, 0.04]),
+        "target_position": np.array([0.4, 0.5, 0.04]),
         "custom_usd_path": "D:/poc/po_wiwynn_test/tst_cylinder01.usda",
         "robot_prim_path": "/World/cobotta_task1",
         "object_prim_path": "/World/pickup_object_task1",
@@ -74,8 +74,8 @@ def example_1_disabled_task():
 
     task2_config = {
         "robot_position": np.array([-1.0, 0.0, 0.0]),
-        "initial_position": np.array([-1.5, 0.4, 0.04]),
-        "target_position": np.array([-1.4, -0.5, 0.04]),
+        "initial_position": np.array([-1.8, 0.6, 0.04]),
+        "target_position": np.array([-1.1, -0.2, 0.04]),
         "custom_usd_path": "D:/poc/po_wiwynn_test/tst_cylinder01.usda",
         "robot_prim_path": "/World/cobotta_task2",
         "object_prim_path": "/World/pickup_object_task2",
@@ -151,7 +151,7 @@ def example_1_disabled_task():
         controller=controller1,
         articulation_controller=articulation_controller1,
         robot_position=task1_config["robot_position"],
-        enabled=False,  # ⚠️ DISABLED - Will not execute!
+        enabled=True,  # ⚠️ DISABLED - Will not execute!
         order=0,
         pause_after=0.0
     )
