@@ -36,8 +36,9 @@ print("="*70)
 # ============================================================================
 # 1. Define Positions
 # ============================================================================
-initial_position = np.array([-0.5, 0.4, 0.125])
-target_position = np.array([-0.6, -0.5, 0.135])
+robot_position = np.array([0.0, 0.0, 0.0])
+initial_position = np.array([-0.5, 0.4, 0.04])
+target_position = np.array([-0.6, -0.5, 0.04])
 custom_usd_path = "D:/poc/po_wiwynn_test/tst_cylinder01.usda"
 
 # ============================================================================
@@ -49,7 +50,8 @@ print("\n→ Setting up scene...")
 setup = PickPlaceSceneSetup(
     custom_usd_path=custom_usd_path,
     object_initial_position=initial_position,
-    target_position=target_position
+    target_position=target_position,
+    robot_position=robot_position
 )
 
 # Add table (optional)
@@ -114,10 +116,19 @@ def simulation_step(step_size):
         # Get observations
         observations = setup.get_observations(robot)
 
-        # Compute actions
+        # Transform world coordinates to robot-local coordinates
+        # The controller expects positions relative to the robot's base frame
+        object_world_pos = observations["pickup_object"]["position"]
+        target_world_pos = observations["pickup_object"]["target_position"]
+
+        # Subtract robot base position to get robot-local coordinates
+        object_local_pos = object_world_pos - robot_position
+        target_local_pos = target_world_pos - robot_position
+
+        # Compute actions using robot-local coordinates
         actions = controller.forward(
-            picking_position=observations["pickup_object"]["position"],
-            placing_position=observations["pickup_object"]["target_position"],
+            picking_position=object_local_pos,
+            placing_position=target_local_pos,
             current_joint_positions=observations["cobotta_robot"]["joint_positions"],
             end_effector_offset=np.array([0, 0, 0.25]),
         )
