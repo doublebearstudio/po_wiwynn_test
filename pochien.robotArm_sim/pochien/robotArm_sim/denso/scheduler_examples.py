@@ -74,8 +74,8 @@ def example_1_disabled_task():
 
     task2_config = {
         "robot_position": np.array([-1.0, 0.0, 0.0]),
-        "initial_position": np.array([-1.8, 0.6, 0.04]),
-        "target_position": np.array([-1.1, -0.2, 0.04]),
+        "initial_position": np.array([-1.6, 0.6, 0.04]),
+        "target_position": np.array([-1.5, -0.2, 0.04]),
         "custom_usd_path": "D:/poc/po_wiwynn_test/tst_cylinder01.usda",
         "robot_prim_path": "/World/cobotta_task2",
         "object_prim_path": "/World/pickup_object_task2",
@@ -151,7 +151,7 @@ def example_1_disabled_task():
         controller=controller1,
         articulation_controller=articulation_controller1,
         robot_position=task1_config["robot_position"],
-        enabled=True,  # ⚠️ DISABLED - Will not execute!
+        enabled=True,
         order=0,
         pause_after=0.0
     )
@@ -164,8 +164,8 @@ def example_1_disabled_task():
         controller=controller2,
         articulation_controller=articulation_controller2,
         robot_position=task2_config["robot_position"],
-        enabled=True,   # ✓ ENABLED - Will execute
-        order=1,
+        enabled=True,
+        order=0,
         pause_after=0.0
     )
 
@@ -368,7 +368,7 @@ def example_2_sequential_with_pauses():
         articulation_controller=articulation_controller2,
         robot_position=task2_config["robot_position"],
         enabled=True,
-        order=1,
+        order=0,
         pause_after=6.0  # ⏸ Pause 6 seconds after completion
     )
 
