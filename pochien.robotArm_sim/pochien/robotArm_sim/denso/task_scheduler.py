@@ -83,7 +83,7 @@ class ScheduledTask:
         self.robot = robot
         self.controller = controller
         self.articulation_controller = articulation_controller
-        self.robot_position = robot_position.copy() if robot_position is not None else np.array([0.0, 0.0, 0.0])
+        self.robot_position = robot_position
         self.enabled = enabled
         self.order = order
         self.pause_after = pause_after
@@ -378,7 +378,7 @@ class TaskScheduler:
             # Get observations
             observations = task.setup.get_observations(task.robot)
 
-            # Get world coordinates from observations
+            # Get world coordinates - controller expects world coordinates, not robot-local
             object_world_pos = observations["pickup_object"]["position"]
             target_world_pos = observations["pickup_object"]["target_position"]
 
@@ -393,34 +393,12 @@ class TaskScheduler:
                 print(f"  controller = {task.controller.name if hasattr(task.controller, 'name') else task.controller}, id = {id(task.controller)}")
                 print(f"  articulation_controller id = {id(task.articulation_controller)}")
                 print(f"  robot = {task.robot.name if hasattr(task.robot, 'name') else task.robot}, id = {id(task.robot)}")
+                print(f"  Passing world coordinates directly to controller (no transformation)")
                 task._debug_printed = True
 
-            # Transform world coordinates to robot-local coordinates
-            # The controller expects positions relative to the robot's base frame
-            object_local_pos = object_world_pos - task.robot_position
-            target_local_pos = target_world_pos - task.robot_position
-
-            # DEBUG: Print transformation
-            if not hasattr(task, '_transform_debug_printed'):
-                # Try to get robot's actual position from USD
-                try:
-                    robot_actual_pos, _ = task.robot.get_world_pose()
-                    print(f"[DEBUG] {task.task_id} coordinate transformation:")
-                    print(f"  object_world_pos = {object_world_pos}")
-                    print(f"  task.robot_position (stored) = {task.robot_position} (id={id(task.robot_position)})")
-                    print(f"  robot.get_world_pose() = {robot_actual_pos}")
-                    print(f"  object_local_pos = {object_local_pos}")
-                    print(f"  target_world_pos = {target_world_pos}")
-                    print(f"  target_local_pos = {target_local_pos}")
-                except Exception as e:
-                    print(f"[DEBUG] {task.task_id} - Could not get robot world pose: {e}")
-                    print(f"[DEBUG] {task.task_id} coordinate transformation:")
-                    print(f"  object_world_pos = {object_world_pos}")
-                    print(f"  task.robot_position = {task.robot_position} (id={id(task.robot_position)})")
-                    print(f"  object_local_pos = {object_local_pos}")
-                    print(f"  target_world_pos = {target_world_pos}")
-                    print(f"  target_local_pos = {target_local_pos}")
-                task._transform_debug_printed = True
+            # Use world positions directly - the controller/RMPFlow handles robot position internally
+            object_local_pos = object_world_pos
+            target_local_pos = target_world_pos
 
             # Compute actions
             actions = task.controller.forward(
