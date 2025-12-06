@@ -93,7 +93,7 @@ class ScheduledTask:
         self.initialized = False
         self.completion_logged = False
 
-        # Pause timing (individual task, not used for group pause)
+        # Pause timing
         self.pause_start_time = None
         self.pause_elapsed = 0.0
 
@@ -134,12 +134,9 @@ class TaskScheduler:
     def __init__(self):
         self.tasks: Dict[str, ScheduledTask] = {}
         self.task_order: List[str] = []  # Ordered list of task IDs
-        self.order_groups: List[List[str]] = []  # Groups of task IDs by order value
-        self.current_order_group_index: int = 0
+        self.current_task_index: int = 0
         self.all_initialized = False
         self.simulation_time = 0.0
-        self.group_pause_start_time: Optional[float] = None  # Track pause for entire group
-        self.group_pause_duration: float = 0.0
 
     def add_task(
         self,
@@ -243,27 +240,11 @@ class TaskScheduler:
             print(f"[TaskScheduler] Task '{task_id}' pause_after set to {pause_seconds}s")
 
     def _rebuild_task_order(self):
-        """
-        Rebuild the ordered list and groups of task IDs based on order attribute.
-
-        Tasks with the same order value are grouped together and execute in parallel.
-        Groups are ordered by their order value (ascending).
-        """
-        # Sort all task IDs by order value
+        """Rebuild the ordered list of task IDs based on order attribute"""
         self.task_order = sorted(
             self.tasks.keys(),
             key=lambda tid: self.tasks[tid].order
         )
-
-        # Group tasks by their order value for parallel execution
-        self.order_groups = []
-        if not self.task_order:
-            return
-
-        # Group consecutive tasks with the same order value
-        from itertools import groupby
-        for order_value, task_ids in groupby(self.task_order, key=lambda tid: self.tasks[tid].order):
-            self.order_groups.append(list(task_ids))
 
     def initialize_all(self):
         """Initialize all robots and controllers (call once at start)"""
@@ -298,7 +279,7 @@ class TaskScheduler:
         # All tasks successfully initialized
         if all_success:
             self.all_initialized = True
-            self.current_order_group_index = 0
+            self.current_task_index = 0
             print(f"[TaskScheduler] All {len(self.tasks)} tasks initialized successfully")
             return True
 
@@ -310,17 +291,13 @@ class TaskScheduler:
         for task in self.tasks.values():
             task.reset()
         self.all_initialized = False
-        self.current_order_group_index = 0
+        self.current_task_index = 0
         self.simulation_time = 0.0
-        self.group_pause_start_time = None
-        self.group_pause_duration = 0.0
         print("[TaskScheduler] Reset complete")
 
     def step(self, delta_time: float = 0.016) -> bool:
         """
         Execute one scheduler step (call every physics frame).
-
-        Tasks with the same order value execute in parallel.
 
         Args:
             delta_time: Time elapsed since last step (seconds)
@@ -336,81 +313,62 @@ class TaskScheduler:
             if not self.initialize_all():
                 return False  # Not initialized yet, will retry next frame
 
-        # Check if all order groups completed
-        if self.current_order_group_index >= len(self.order_groups):
+        # Check if all tasks completed
+        if self.current_task_index >= len(self.task_order):
             return True  # All done
 
-        # Handle group-level pause
-        if self.group_pause_start_time is not None:
-            elapsed = self.simulation_time - self.group_pause_start_time
-            if elapsed >= self.group_pause_duration:
-                print(f"[TaskScheduler] ⏭ Group pause complete, moving to next order group...")
-                self.group_pause_start_time = None
-                self.group_pause_duration = 0.0
-                self.current_order_group_index += 1
-                return False
-            else:
-                return False  # Still pausing
+        # Get current task
+        task_id = self.task_order[self.current_task_index]
+        task = self.tasks[task_id]
 
-        # Get current order group (list of task IDs)
-        current_group = self.order_groups[self.current_order_group_index]
+        # Skip disabled tasks
+        if not task.enabled:
+            print(f"[TaskScheduler] Skipping disabled task '{task_id}'")
+            self.current_task_index += 1
+            return self.step(delta_time)  # Move to next task
 
-        # Track if any task started in this frame (for logging)
-        group_started = False
+        # Handle task states
+        if task.state == TaskState.PENDING:
+            # Start the task
+            task.state = TaskState.RUNNING
+            print(f"[TaskScheduler] ▶ Starting task '{task_id}' (order {task.order})")
 
-        # Execute all tasks in the current group (parallel execution)
-        for task_id in current_group:
-            task = self.tasks[task_id]
+        elif task.state == TaskState.RUNNING:
+            # Execute task
+            self._execute_task(task)
 
-            # Skip disabled tasks
-            if not task.enabled:
-                task.state = TaskState.DISABLED
-                continue
+            # Check if completed
+            if task.controller.is_done():
+                if not task.completion_logged:
+                    print(f"[TaskScheduler] ✓ Task '{task_id}' completed")
+                    task.completion_logged = True
+                    task.state = TaskState.COMPLETED
 
-            # Handle task states
-            if task.state == TaskState.PENDING:
-                # Start the task
-                task.state = TaskState.RUNNING
-                if not group_started:
-                    print(f"[TaskScheduler] ▶ Starting order group {task.order} (parallel tasks: {', '.join(current_group)})")
-                    group_started = True
+                    # Start pause if needed
+                    if task.pause_after > 0:
+                        task.state = TaskState.PAUSING
+                        task.pause_start_time = self.simulation_time
+                        print(f"[TaskScheduler] ⏸ Pausing for {task.pause_after}s before next task...")
+                    else:
+                        # Move to next task immediately
+                        self.current_task_index += 1
 
-            elif task.state == TaskState.RUNNING:
-                # Execute task
-                self._execute_task(task)
+        elif task.state == TaskState.PAUSING:
+            # Wait for pause duration
+            task.pause_elapsed = self.simulation_time - task.pause_start_time
 
-                # Check if completed
-                if task.controller.is_done():
-                    if not task.completion_logged:
-                        print(f"[TaskScheduler] ✓ Task '{task_id}' completed")
-                        task.completion_logged = True
-                        task.state = TaskState.COMPLETED
+            if task.pause_elapsed >= task.pause_after:
+                print(f"[TaskScheduler] ⏭ Pause complete, moving to next task...")
+                task.state = TaskState.COMPLETED
+                self.current_task_index += 1
 
-        # Check if ALL tasks in the group are completed or disabled
-        all_done = True
-        for task_id in current_group:
-            task = self.tasks[task_id]
-            if task.enabled and task.state not in [TaskState.COMPLETED, TaskState.ERROR]:
-                all_done = False
-                break
+        elif task.state == TaskState.COMPLETED:
+            # Should not happen (should have moved to next task)
+            self.current_task_index += 1
 
-        # If all tasks in group are done, check for pause
-        if all_done:
-            # Find maximum pause_after from all tasks in this group
-            max_pause = 0.0
-            for task_id in current_group:
-                task = self.tasks[task_id]
-                if task.enabled and task.pause_after > max_pause:
-                    max_pause = task.pause_after
-
-            if max_pause > 0:
-                print(f"[TaskScheduler] ⏸ Order group {self.tasks[current_group[0]].order} completed, pausing for {max_pause}s...")
-                self.group_pause_start_time = self.simulation_time
-                self.group_pause_duration = max_pause
-            else:
-                # No pause, move to next group immediately
-                print(f"[TaskScheduler] ✓ Order group {self.tasks[current_group[0]].order} completed")
-                self.current_order_group_index += 1
+        elif task.state == TaskState.ERROR:
+            print(f"[TaskScheduler] ✗ Task '{task_id}' in error state, skipping...")
+            self.current_task_index += 1
 
         return False  # Not all done yet
 
@@ -482,15 +440,10 @@ class TaskScheduler:
 
     def get_status(self) -> Dict[str, Any]:
         """Get current scheduler status"""
-        current_group = None
-        if self.current_order_group_index < len(self.order_groups):
-            current_group = self.order_groups[self.current_order_group_index]
-
         return {
             "total_tasks": len(self.tasks),
-            "total_order_groups": len(self.order_groups),
-            "current_order_group_index": self.current_order_group_index,
-            "current_group_tasks": current_group,
+            "current_task_index": self.current_task_index,
+            "current_task": self.task_order[self.current_task_index] if self.current_task_index < len(self.task_order) else None,
             "tasks": {
                 tid: {
                     "order": task.order,
@@ -505,17 +458,11 @@ class TaskScheduler:
     def print_status(self):
         """Print current scheduler status"""
         print("\n" + "="*70)
-        print("TASK SCHEDULER STATUS (PARALLEL EXECUTION)")
+        print("TASK SCHEDULER STATUS")
         print("="*70)
         print(f"Total tasks: {len(self.tasks)}")
-        print(f"Total order groups: {len(self.order_groups)}")
-        print(f"Current order group: {self.current_order_group_index}/{len(self.order_groups)}")
+        print(f"Current task index: {self.current_task_index}/{len(self.task_order)}")
         print(f"Simulation time: {self.simulation_time:.2f}s")
-        print("\nOrder Groups:")
-        for i, group in enumerate(self.order_groups):
-            group_status = "→" if i == self.current_order_group_index else "✓" if i < self.current_order_group_index else "○"
-            order_val = self.tasks[group[0]].order
-            print(f"  {group_status} Group {i} (order={order_val}): {', '.join(group)}")
         print("\nTasks:")
         for task_id in self.task_order:
             task = self.tasks[task_id]
