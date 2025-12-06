@@ -47,10 +47,12 @@ if denso_dir not in sys.path:
 try:
     from simple_pick_place_setup import PickPlaceSceneSetup
     from pick_place_controller import PickPlaceController
+    from task_scheduler import TaskScheduler
 except ImportError as e:
     print(f"Warning: Could not import required modules: {e}")
     PickPlaceSceneSetup = None
     PickPlaceController = None
+    TaskScheduler = None
 
 
 class MyExtension(omni.ext.IExt):
@@ -76,6 +78,9 @@ class MyExtension(omni.ext.IExt):
         self._task_robots = []  # List of robot objects (one per task)
         self._task_controllers = []  # List of controllers (one per task)
         self._task_articulation_controllers = []  # List of articulation controllers (one per task)
+
+        # Task scheduler
+        self._scheduler = None
 
         self._physics_subscription = None
         self._timeline_subscription = None
@@ -272,6 +277,13 @@ class MyExtension(omni.ext.IExt):
             'robot_prim_path': f"/World/cobotta_task{task_id}",
             'object_prim_path': f"/World/pickup_object_task{task_id}",
             'target_marker_path': f"/World/target_marker_task{task_id}",
+            # Scheduler parameters
+            'enabled': True,
+            'order': 0,
+            'pause_after': 0.0,
+            'enabled_checkbox': None,
+            'order_field': None,
+            'pause_after_field': None,
             # Runtime objects (set during setup)
             'setup': None,
             'robot': None,
@@ -283,6 +295,54 @@ class MyExtension(omni.ext.IExt):
         with self._tasks_container:
             with ui.CollapsableFrame(task_name, height=0, collapsed=False):
                 with ui.VStack(spacing=10):
+                    # Scheduler Parameters
+                    with ui.CollapsableFrame("Scheduler Parameters", height=0, collapsed=False):
+                        with ui.VStack(spacing=5):
+                            # Row 1: Enabled checkbox, Order field, Pause field
+                            with ui.HStack(spacing=5):
+                                ui.Label("Enabled:", style={"font_size": 11}, width=60)
+                                task_data['enabled_checkbox'] = ui.CheckBox(width=20)
+                                task_data['enabled_checkbox'].model.set_value(task_data['enabled'])
+
+                                ui.Spacer(width=10)
+
+                                ui.Label("Order:", style={"font_size": 11}, width=50)
+                                task_data['order_field'] = ui.IntField(height=20, width=60)
+                                task_data['order_field'].model.set_value(task_data['order'])
+
+                                ui.Spacer(width=10)
+
+                                ui.Label("Pause(s):", style={"font_size": 11}, width=60)
+                                task_data['pause_after_field'] = ui.FloatField(height=20, width=60)
+                                task_data['pause_after_field'].model.set_value(task_data['pause_after'])
+
+                            ui.Spacer(height=5)
+
+                            # Row 2: Reset and Update buttons
+                            with ui.HStack(spacing=5):
+                                ui.Button(
+                                    "Reset",
+                                    clicked_fn=lambda task=task_data: self._on_reset_scheduler_params(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF666666,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+                                ui.Button(
+                                    "Update",
+                                    clicked_fn=lambda task=task_data: self._on_update_scheduler_params(task),
+                                    height=25,
+                                    style={
+                                        "Button": {
+                                            "background_color": 0xFF2288FF,
+                                            "font_size": 12
+                                        }
+                                    }
+                                )
+
                     # Scene Parameters
                     with ui.CollapsableFrame("Scene Parameters", height=0, collapsed=False):
                         with ui.VStack(spacing=5):
@@ -609,6 +669,53 @@ class MyExtension(omni.ext.IExt):
         else:
             self._update_status(f"{task['name']} event timing updated!", error=False)
 
+    def _on_reset_scheduler_params(self, task):
+        """Reset scheduler parameters for a specific task to defaults."""
+        # Reset to default values
+        task['enabled'] = True
+        task['order'] = 0
+        task['pause_after'] = 0.0
+
+        # Update UI fields
+        task['enabled_checkbox'].model.set_value(task['enabled'])
+        task['order_field'].model.set_value(task['order'])
+        task['pause_after_field'].model.set_value(task['pause_after'])
+
+        self._update_status(f"{task['name']} scheduler parameters reset to defaults.", error=False)
+        print(f"[RobotPickup] {task['name']} - Scheduler params reset: enabled={task['enabled']}, order={task['order']}, pause_after={task['pause_after']}")
+
+    def _on_update_scheduler_params(self, task):
+        """Update scheduler parameters for a specific task from UI fields."""
+        # Read current values from UI
+        new_enabled = task['enabled_checkbox'].model.get_value_as_bool()
+        new_order = task['order_field'].model.get_value_as_int()
+        new_pause_after = task['pause_after_field'].model.get_value_as_float()
+
+        # Update task dictionary
+        task['enabled'] = new_enabled
+        task['order'] = new_order
+        task['pause_after'] = new_pause_after
+
+        # If scheduler exists, update it directly
+        if self._scheduler:
+            # Update enabled state
+            if new_enabled:
+                self._scheduler.enable_task(task['name'])
+            else:
+                self._scheduler.disable_task(task['name'])
+
+            # Update order
+            self._scheduler.set_task_order(task['name'], new_order)
+
+            # Update pause_after
+            self._scheduler.set_pause_after(task['name'], new_pause_after)
+
+            self._update_status(f"{task['name']} scheduler updated! Changes will apply on next simulation.", error=False)
+        else:
+            self._update_status(f"{task['name']} scheduler parameters saved! Will apply when scene is set up.", error=False)
+
+        print(f"[RobotPickup] {task['name']} - Updated scheduler params: enabled={new_enabled}, order={new_order}, pause_after={new_pause_after}")
+
     def _on_empty_scene_clicked(self):
         """Handle New Scene button - Create a new empty stage."""
         print("[RobotPickup] New Scene button clicked")
@@ -641,6 +748,9 @@ class MyExtension(omni.ext.IExt):
             self._task_robots.clear()
             self._task_controllers.clear()
             self._task_articulation_controllers.clear()
+
+            # Reset scheduler
+            self._scheduler = None
 
             # Clear task runtime objects
             for task in self._tasks:
@@ -716,6 +826,14 @@ class MyExtension(omni.ext.IExt):
             self._task_controllers.clear()
             self._task_articulation_controllers.clear()
 
+            # Create task scheduler
+            print("\n→ Creating task scheduler...")
+            if not TaskScheduler:
+                self._update_status("Error: TaskScheduler not available!", error=True)
+                return
+            self._scheduler = TaskScheduler()
+            print("✓ Scheduler created")
+
             # Loop through all tasks and create objects for each
             for task_idx, task in enumerate(self._tasks):
                 print(f"\n→ Setting up {task['name']}...")
@@ -766,6 +884,23 @@ class MyExtension(omni.ext.IExt):
                 self._task_robots.append(robot)
                 self._task_controllers.append(controller)
                 self._task_articulation_controllers.append(articulation_controller)
+
+                # Add task to scheduler
+                print(f"  → Adding {task['name']} to scheduler (enabled={task['enabled']}, order={task['order']}, pause={task['pause_after']}s)...")
+                print(f"  DEBUG: task['robot_position'] = {task['robot_position']} (id={id(task['robot_position'])})")
+                print(f"  DEBUG: task['initial_position'] = {task['initial_position']}")
+                print(f"  DEBUG: task['target_position'] = {task['target_position']}")
+                self._scheduler.add_task(
+                    task_id=task['name'],
+                    setup=setup,
+                    robot=robot,
+                    controller=controller,
+                    articulation_controller=articulation_controller,
+                    robot_position=task['robot_position'],
+                    enabled=task['enabled'],
+                    order=task['order'],
+                    pause_after=task['pause_after']
+                )
 
                 print(f"✓ {task['name']} setup complete")
 
@@ -1032,15 +1167,11 @@ class MyExtension(omni.ext.IExt):
         if hasattr(self, '_all_tasks_done_logged'):
             delattr(self, '_all_tasks_done_logged')
 
-        # Reset all task controllers and flags
-        for task in self._tasks:
-            if task['controller']:
-                try:
-                    task['controller'].reset()
-                    task['done_logged'] = False
-                    print(f"[RobotPickup] {task['name']} controller reset")
-                except Exception as e:
-                    print(f"[RobotPickup] {task['name']} controller reset error: {e}")
+        # Reset scheduler (which resets all task controllers)
+        if self._scheduler:
+            print("[RobotPickup] Resetting scheduler...")
+            self._scheduler.reset()
+            print("[RobotPickup] Scheduler reset complete")
 
         self._update_status(
             "Simulation stopped. Click 'Start Simulation' to run again.",
@@ -1074,49 +1205,17 @@ class MyExtension(omni.ext.IExt):
                 # Wait for physics context
                 return
 
-        # Main control loop - handle all tasks
+        # Main control loop - delegate to scheduler
         try:
-            all_done = True
-
-            for task_idx, task in enumerate(self._tasks):
-                # Skip if this task is already done
-                if task['controller'].is_done():
-                    if not task['done_logged']:
-                        print(f"✓ {task['name']} complete!")
-                        task['done_logged'] = True
-                    continue
-
-                all_done = False
-
-                # Get observations for this task
-                observations = task['setup'].get_observations(task['robot'])
-
-                # Transform world coordinates to robot-local coordinates
-                # The controller expects positions relative to the robot's base frame
-                object_world_pos = observations["pickup_object"]["position"]
-                target_world_pos = observations["pickup_object"]["target_position"]
-
-                # Subtract robot base position to get robot-local coordinates
-                object_local_pos = object_world_pos - task['robot_position']
-                target_local_pos = target_world_pos - task['robot_position']
-
-                # Compute actions using robot-local coordinates
-                actions = task['controller'].forward(
-                    picking_position=object_local_pos,
-                    placing_position=target_local_pos,
-                    current_joint_positions=observations["cobotta_robot"]["joint_positions"],
-                    end_effector_offset=np.array([0, 0, 0.25]),
-                )
-
-                # Apply actions for this task
-                if actions:
-                    task['articulation_controller'].apply_action(actions)
+            # Let the scheduler handle task execution (respects enabled, order, pause_after)
+            all_done = self._scheduler.step(delta_time=step_size)
 
             # All tasks complete
             if all_done and not hasattr(self, '_all_tasks_done_logged'):
                 print("\n" + "="*70)
                 print(f"✓ ALL {len(self._tasks)} TASKS COMPLETE!")
                 print("="*70)
+                self._scheduler.print_status()
                 self._update_status(f"All {len(self._tasks)} tasks complete!", error=False)
                 self._all_tasks_done_logged = True
 
