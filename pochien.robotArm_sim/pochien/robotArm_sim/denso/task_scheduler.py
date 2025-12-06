@@ -378,27 +378,29 @@ class TaskScheduler:
             # Get observations
             observations = task.setup.get_observations(task.robot)
 
-            # Get world coordinates - controller expects world coordinates, not robot-local
+            # Get world coordinates
             object_world_pos = observations["pickup_object"]["position"]
             target_world_pos = observations["pickup_object"]["target_position"]
+
+            # Convert world coordinates to robot-local coordinates
+            # Controller expects positions relative to robot base
+            object_local_pos = object_world_pos - task.robot_position
+            target_local_pos = target_world_pos - task.robot_position
 
             # DEBUG: Print coordinate information (only once per task start)
             if not hasattr(task, '_debug_printed'):
                 print(f"\n[DEBUG] Executing '{task.task_id}':")
                 print(f"  setup.object_prim_path = {task.setup.object_prim_path}")
                 print(f"  setup.target_position = {task.setup.target_position}")
-                print(f"  robot_position = {task.robot_position}, id = {id(task.robot_position)}")
+                print(f"  robot_position (stored) = {task.robot_position}, id = {id(task.robot_position)}")
                 print(f"  object_world_pos = {object_world_pos}")
                 print(f"  target_world_pos = {target_world_pos}")
+                print(f"  object_local_pos (relative to robot) = {object_local_pos}")
+                print(f"  target_local_pos (relative to robot) = {target_local_pos}")
                 print(f"  controller = {task.controller.name if hasattr(task.controller, 'name') else task.controller}, id = {id(task.controller)}")
                 print(f"  articulation_controller id = {id(task.articulation_controller)}")
                 print(f"  robot = {task.robot.name if hasattr(task.robot, 'name') else task.robot}, id = {id(task.robot)}")
-                print(f"  Passing world coordinates directly to controller (no transformation)")
                 task._debug_printed = True
-
-            # Use world positions directly - the controller/RMPFlow handles robot position internally
-            object_local_pos = object_world_pos
-            target_local_pos = target_world_pos
 
             # Compute actions
             actions = task.controller.forward(
